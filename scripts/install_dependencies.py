@@ -83,6 +83,6 @@ if __name__ == "__main__":
     install_rocksdb()
     install_nasm_assembler()
     install_libisal()
-    os.rmdir(root_path)
+    subprocess.run("sudo rm -rf {}".format(root_path), shell=True)
 
 

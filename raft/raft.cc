@@ -698,8 +698,7 @@ void RaftState::convertToPreLeader() {
   preleader_timepoint_ = util::NowTime();
 
   // If there is no entry need to be collected, become leader immediately
-  // if (CommitIndex() == lm_->LastLogEntryIndex()) {
-  if (0 == lm_->LastLogEntryIndex()) {
+  if (CommitIndex() == lm_->LastLogEntryIndex()) {
     convertToLeader();
     return;
   }
@@ -771,7 +770,7 @@ void RaftState::collectFragments() {
       lm_->LastLogEntryIndex());
 
   // Initiate a request fragments task
-  auto recover_start_index = 1;
+  auto recover_start_index = CommitIndex() + 1;
   preleader_stripe_store_.InitRequestFragmentsTask(
       recover_start_index, lm_->LastLogEntryIndex(), peers_.size() + 1, id_);
   preleader_timer_.Reset();
