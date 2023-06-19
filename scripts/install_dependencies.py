@@ -2,23 +2,22 @@ import subprocess
 import os
 
 def install_rocksdb():
-    if not os.path.exists("v7.4.5.tar.gz"):
-        subprocess.run("wget https://github.com/facebook/rocksdb/archive/refs/tags/v7.4.5.tar.gz", shell=True)
-    if not os.path.exists("rocksdb-7.4.5"):
-        subprocess.run("tar -zxvf v7.4.5.tar.gz", shell=True)
-    os.chdir("rocksdb-7.4.5")
+    subprocess.run("git clone git@github.com:facebook/rocksdb.git", shell=True)
+    os.chdir("rocksdb")
+    subprocess.run("git checkout v7.4.5")
     subprocess.run("make static_lib -j 8", shell=True)
     subprocess.run("sudo make install", shell=True)
     os.chdir("..")
     subprocess.run("rm -rf rocksdb-7.4.5 && rm -rf v7.4.5.tar.gz", shell=True)
 
 def install_gtest():
-    subprocess.run("git clone git@github.com:google/googletest.git", shell=True)
+    if not os.path.exists("googletest"):
+        subprocess.run("git clone git@github.com:google/googletest.git", shell=True)
     os.chdir("googletest")
-    subprocess.run("cmake3 -B build", shell=True)
-    subprocess.run("cmake3 --build build", shell=True)
+    subprocess.run("cmake -B build", shell=True)
+    subprocess.run("cmake --build build", shell=True)
     os.chdir("build")
-    subprocess.run("make install", shell=True)
+    subprocess.run("sudo make install", shell=True)
 
 def install_rocksdb_dependencies_centos():
     print("Install RocksDB Dependencies for CentOS")
@@ -32,12 +31,12 @@ def install_rocksdb_dependencies_centos():
 
 def install_rocksdb_dependencies_ubuntu():
     print("Install RocksDB Dependencies for Ubuntu")
-    subprocess.run("apt-get install -y uuid-devel", shell=True)
-    subprocess.run("apt-get install -y zlib1g-dev", shell=True)
-    subprocess.run("apt-get install -y libbz2-dev", shell=True)
-    subprocess.run("apt-get install -y liblz4-dev", shell=True)
-    subprocess.run("apt-get install -y libsnappy-dev", shell=True)
-    subprocess.run("apt-get install -y libzstd-dev", shell=True)
+    subprocess.run("sudo apt-get install -y uuid-dev", shell=True)
+    subprocess.run("sudo apt-get install -y zlib1g-dev", shell=True)
+    subprocess.run("sudo apt-get install -y libbz2-dev", shell=True)
+    subprocess.run("sudo apt-get install -y liblz4-dev", shell=True)
+    subprocess.run("sudo apt-get install -y libsnappy-dev", shell=True)
+    subprocess.run("sudo apt-get install -y libzstd-dev", shell=True)
 
 def install_rocksdb_dependencies():
     result = os.popen("lsb_release -a")
