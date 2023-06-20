@@ -14,6 +14,7 @@ DEFINE_string(conf, "", "The position of cluster configuration file");
 DEFINE_int32(id, -1, "The node id in the cluster");
 
 int main(int argc, char *argv[]) {
+  gflags::ParseCommandLineFlags(&argc, &argv, true);
   // read configuration from existing files
   auto cluster_cfg = ParseConfigurationFile(FLAGS_conf);
   auto node_id = FLAGS_id;

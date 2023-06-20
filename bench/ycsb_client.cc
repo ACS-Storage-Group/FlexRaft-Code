@@ -223,6 +223,7 @@ void ExecuteBench(kv::KvServiceClient *client, int client_id, int interval,
 // Arg4: operation count
 // Arg5: YCSB operation Type
 int main(int argc, char *argv[]) {
+  gflags::ParseCommandLineFlags(&argc, &argv, true);
   auto cluster_cfg = ParseConfigurationFile(FLAGS_conf);
   auto client_num = FLAGS_client_num;
 
