@@ -1,6 +1,7 @@
 import util
 import sys
 import time
+import subprocess
 from random import randrange
 
 
@@ -11,7 +12,7 @@ if __name__ == "__main__":
     N = int(sys.argv[1])
     f = int(sys.argv[2])
     cfg_file = "cluster_{}.conf".format(N)
-    servers = util.ParseClusterConfiguration(cfg_file, "")
+    servers = util.ParseClusterConfiguration(cfg_file, "-i ~/.ssh/FlexibleK_Experiment.pem")
 
     for i in range(f):
         servers.pop(randrange(len(servers)))
@@ -51,7 +52,8 @@ if __name__ == "__main__":
         if pr.returncode != 0:
             print("Execute client failed")
         else:
-            print("Execute client succeed")
+            for line in pr.stdout:
+                print(line)
 
     for server in servers:
         server.clear()
