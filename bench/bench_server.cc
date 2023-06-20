@@ -1,3 +1,4 @@
+#include <chrono>
 #include <cstdlib>
 #include <fstream>
 #include <gflags/gflags.h>
@@ -30,6 +31,10 @@ int main(int argc, char *argv[]) {
   node->InitServiceNodeState();
   RCF::sleepMs(1000);
   node->StartServiceNode();
+
+  while (true) {
+    std::this_thread::sleep_for(std::chrono::seconds(10));
+  }
 
   std::cout << "[Print to exit]:" << std::endl;
   char c;
