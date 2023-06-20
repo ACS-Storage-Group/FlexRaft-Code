@@ -8,12 +8,12 @@ This repository contains the implementation of our *ICPP'23* paper: **Minimizing
 
 * **Building System:** *cmake* version >= 3.8
 
-* **Compiler:** *g++* or *clang* with C++17 support
+* **Compiler:** *g++* version >= 10. 
 * **Supported Platform:**  Our code is tested on Ubuntu20.04 and CentOS7. Operating systems of these platforms or of higher versions are supposed to support FlexRaft. 
 
 ### Dependencies
 
-FlexRaft requires a bunch of dependence third-party libraries, including [RocksDB](https://github.com/facebook/rocksdb), [Intel isa-l](https://github.com/intel/isa-l). Execute the following command to install all dependencies. Note that the user must ensure the host can access the network and python3 is installed. 
+FlexRaft requires a bunch of dependence third-party libraries, including [RocksDB](https://github.com/facebook/rocksdb), [Intel isa-l](https://github.com/intel/isa-l). Execute the following command to install all dependencies. Ensure the host can access the network and the user has root privilege. 
 
 ```bash
 python3 scripts/install_dependencies.py

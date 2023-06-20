@@ -5,6 +5,8 @@ r = os.popen("pwd")
 root_path = r.read()[:-1] + "/dep"
 r.close()
 print("pwd={}".format(root_path))
+if os.path.exists(root_path):
+    subprocess.run("sudo rm -rf {}".format(root_path), shell=True)
 os.mkdir(root_path)
 os.chdir(root_path)
 
@@ -37,6 +39,7 @@ def install_rocksdb_dependencies_centos():
     subprocess.run("sudo yum -y install lz4-devel", shell=True)
     subprocess.run("sudo yum -y install snappy-devel", shell=True)
     subprocess.run("sudo yum -y install libzstd-devel", shell=True)
+    subprocess.run("sudo yum -y install gflags-devel", shell=True)
 
 def install_rocksdb_dependencies_ubuntu():
     print("Install RocksDB Dependencies for Ubuntu")
@@ -46,6 +49,7 @@ def install_rocksdb_dependencies_ubuntu():
     subprocess.run("sudo apt-get install -y liblz4-dev", shell=True)
     subprocess.run("sudo apt-get install -y libsnappy-dev", shell=True)
     subprocess.run("sudo apt-get install -y libzstd-dev", shell=True)
+    subprocess.run("sudo apt-get install -y libgflags-dev", shell=True)
 
 def install_rocksdb_dependencies():
     result = os.popen("lsb_release -a")
