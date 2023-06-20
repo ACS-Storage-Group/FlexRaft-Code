@@ -1,5 +1,6 @@
 import util
 import sys
+import time
 from random import randrange
 
 
@@ -34,7 +35,8 @@ if __name__ == "__main__":
 
     print("[BootStrap all Raft servers successfull...]")
 
-    
+    time.sleep(10)
 
-
+    for server in servers:
+        server.clear()
 
