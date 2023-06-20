@@ -1,5 +1,6 @@
 #include <cstdlib>
 #include <fstream>
+#include <gflags/gflags.h>
 #include <iostream>
 #include <string>
 #include <thread>
@@ -9,15 +10,13 @@
 #include "rpc.h"
 #include "util.h"
 
-int main(int argc, char* argv[]) {
+DEFINE_string(conf, "", "The position of cluster configuration file");
+DEFINE_int32(id, -1, "The node id in the cluster");
+
+int main(int argc, char *argv[]) {
   // read configuration from existing files
-  if (argc < 3) {
-    std::cerr << "[Error] Needs at least three input parameters: get " << argc
-              << std::endl;
-    return 0;
-  }
-  auto cluster_cfg = ParseConfigurationFile(std::string(argv[1]));
-  auto node_id = std::stoi(std::string(argv[2]));
+  auto cluster_cfg = ParseConfigurationFile(FLAGS_conf);
+  auto node_id = FLAGS_id;
 
   // Run the server
   auto node = kv::KvServiceNode::NewKvServiceNode(cluster_cfg, node_id);

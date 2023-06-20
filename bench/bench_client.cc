@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <gflags/gflags.h>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -14,6 +15,11 @@
 #include "rpc.h"
 #include "type.h"
 #include "util.h"
+
+DEFINE_string(conf, "", "Path to the cluster configuration file");
+DEFINE_int32(id, -1, "The client Id");
+DEFINE_string(size, "", "The size of the values");
+DEFINE_int32(write_num, 0, "The number of write operations to execute");
 
 using KvPair = std::pair<std::string, std::string>;
 const int kVerboseInterval = 100;
@@ -135,18 +141,13 @@ void ExecuteBench(kv::KvServiceClient *client,
 }
 
 int main(int argc, char *argv[]) {
-  if (argc < 4) {
-    std::cerr << "[Error] Expect at least one parameter, get" << argc
-              << std::endl;
-    return 0;
-  }
-  auto cluster_cfg = ParseConfigurationFile(std::string(argv[1]));
-  int client_id = std::stoi(argv[2]);
+  auto cluster_cfg = ParseConfigurationFile(FLAGS_conf);
+  int client_id = FLAGS_id;
 
   auto key_prefix = "key-" + std::to_string(client_id);
   auto value_prefix = "value-" + std::to_string(client_id) + "-";
-  auto put_cnt = ParseCommandSize(std::string(argv[4]));
-  auto val_size = ParseCommandSize(std::string(argv[3]));
+  auto val_size = ParseCommandSize(FLAGS_size);
+  auto put_cnt = FLAGS_write_num;
 
   std::vector<KvPair> bench;
   auto bench_cfg =

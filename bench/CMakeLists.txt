@@ -38,18 +38,18 @@ endforeach()
 include_directories(../kv)
 
 add_executable(bench_server bench_server.cc)
-target_link_libraries(bench_server kv)
+target_link_libraries(bench_server kv gflags)
 
 add_executable(bench_client bench_client.cc)
-target_link_libraries(bench_client kv)
+target_link_libraries(bench_client kv gflags)
 
 add_executable(ycsb_server ycsb_server.cc)
-target_link_libraries(ycsb_server kv)
+target_link_libraries(ycsb_server kv gflags)
 
 add_executable(ycsb_client ycsb_client.cc)
-target_link_libraries(ycsb_client kv)
+target_link_libraries(ycsb_client kv gflags)
 
 add_executable(readbench_client readbench_client.cc)
-target_link_libraries(readbench_client kv)
+target_link_libraries(readbench_client kv gflags)
 
 

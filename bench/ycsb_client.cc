@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <gflags/gflags.h>
 #include <iostream>
 #include <string>
 #include <thread>
@@ -15,6 +16,13 @@
 #include "rpc.h"
 #include "type.h"
 #include "util.h"
+
+DEFINE_string(conf, "", "Path to the configuration file");
+DEFINE_int32(client_num, 0, "Number of concurrent clients");
+DEFINE_string(size, "", "Size of values, e.g. 512, 4K, 1M");
+DEFINE_int32(op_count, 0, "Number of operations to execute");
+DEFINE_string(type, "None",
+              "YCSB benchmark type: YCSB_A, YCSB_B, YCSB_C, YCSB_D, YCSB_F");
 
 using KvPair = std::pair<std::string, std::string>;
 const int kVerboseInterval = 100;
@@ -215,33 +223,28 @@ void ExecuteBench(kv::KvServiceClient *client, int client_id, int interval,
 // Arg4: operation count
 // Arg5: YCSB operation Type
 int main(int argc, char *argv[]) {
-  if (argc < 4) {
-    std::cerr << "[Error] Expect at least one parameter, get" << argc
-              << std::endl;
-    return 0;
-  }
-  auto cluster_cfg = ParseConfigurationFile(std::string(argv[1]));
-  auto client_num = std::stoi(argv[2]);
+  auto cluster_cfg = ParseConfigurationFile(FLAGS_conf);
+  auto client_num = FLAGS_client_num;
 
-  auto val_size = ParseCommandSize(std::string(argv[3]));
-  auto op_cnt = ParseCommandSize(std::string(argv[4]));
+  auto val_size = ParseCommandSize(FLAGS_size);
+  auto op_cnt = FLAGS_op_count;
 
   // Define YCSB Type
   auto bench_type = YCSB_A;
   auto put_prop = 50;
-  if (strcmp(argv[5], "YCSB_A") == 0) {
+  if (FLAGS_type == "YCSB_A") {
     bench_type = YCSB_A;
     put_prop = 50;
-  } else if (strcmp(argv[5], "YCSB_B") == 0) {
+  } else if (FLAGS_type == "YCSB_B") {
     bench_type = YCSB_B;
     put_prop = 5;
-  } else if (strcmp(argv[5], "YCSB_C") == 0) {
+  } else if (FLAGS_type == "YCSB_C") {
     bench_type = YCSB_C;
     put_prop = 0;
-  } else if (strcmp(argv[5], "YCSB_D") == 0) {
+  } else if (FLAGS_type == "YCSB_D") {
     bench_type = YCSB_D;
     put_prop = 5;
-  } else if (strcmp(argv[5], "YCSB_F") == 0) {
+  } else if (FLAGS_type == "YCSB_F") {
     bench_type = YCSB_F;
     put_prop = 50;
   }
