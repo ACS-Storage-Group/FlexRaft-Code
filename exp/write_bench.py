@@ -35,7 +35,23 @@ if __name__ == "__main__":
 
     print("[BootStrap all Raft servers successfull...]")
 
-    time.sleep(10)
+    time.sleep(1)
+
+    # bootstrap current server as a client
+    values = ["4K", "16K", "64K", "128K", "256K", "512K", "1024K", "2048K"]
+    write_count = [1000] * len(values)
+
+    client_bin = "/root/FlexRaft-Code/build/bench/bench_client"
+    client_cfg = "/root/FlexRaft-Code/exp/{}".format(cfg_file)
+
+    for i in range(len(values)):
+        client_cmd = "{} --conf={} --id=0 --size={} --write_num={}".format(
+            client_bin, client_cfg, values[i], write_count[i])
+        pr = subprocess.run(client_cmd, stdout=subprocess.PIPE, shell=True)
+        if pr.returncode != 0:
+            print("Execute client failed")
+        else:
+            print("Execute client succeed")
 
     for server in servers:
         server.clear()

@@ -31,9 +31,8 @@ class Server:
         return self.execute(cmd)
 
     def bootstrap_as_server(self, bin:str, conf:str):
-        cmd = "nohup {} --conf={} --id={} > /dev/null 2> /dev/null &".format(bin, conf, self.id)
+        cmd = "nohup {} --conf={} --id={} > /dev/null 2&>1 &".format(bin, conf, self.id)
         return self.execute(cmd)
-
 
 
 def ParseClusterConfiguration(conf_file:str, ssh_token:str) -> [Server]:
