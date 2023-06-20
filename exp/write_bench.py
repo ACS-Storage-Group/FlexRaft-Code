@@ -52,8 +52,7 @@ if __name__ == "__main__":
         if pr.returncode != 0:
             print("Execute client failed")
         else:
-            for line in pr.stdout:
-                print(line)
+            print(pr.stdout)
 
     for server in servers:
         server.clear()
