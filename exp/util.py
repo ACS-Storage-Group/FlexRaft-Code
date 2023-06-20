@@ -31,6 +31,10 @@ class Server:
     def bootstrap_as_server(self, bin:str, conf:str):
         cmd = "nohup {} --conf={} --id={} > /dev/null 2&>1 &".format(bin, conf, self.id)
         return self.execute(cmd)
+    
+    def limit_bw(self, nic:str, bw:str):
+        cmd = "tc qdisc del dev {} root; tc qdisc add dev {} root handle 1:  htb default 11; tc class add dev {} parent 1: classid 1:11 htb rate {} ceil {}".format(nic, nic, nic, bw, bw)
+        return self.execute(cmd)
 
 
 def ParseClusterConfiguration(conf_file:str, ssh_token:str) -> [Server]:
@@ -49,9 +53,13 @@ def ParseClusterConfiguration(conf_file:str, ssh_token:str) -> [Server]:
     f.close()
     return servers
 
-def ClearTestContext(servers: [Server], token:str):
+def ClearTestContext(servers: [Server]):
     for server in servers:
         server.clear()
+
+def LimitBandwidth(servers: [Server]):
+    for server in servers:
+        server.limit_bw()
 
 
 if __name__ == "__main__":
