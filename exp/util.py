@@ -17,6 +17,7 @@ class Server:
         if pr.returncode != 0:
             print("[Server({}) execute command {} failed, please retry]".format(self.id, cmd))
             return pr.returncode
+        return 0
 
     def shutdown(self):
         cmd = "killall bench_server; killall bench_client; killall ycsb_server; killall ycsb_client"
