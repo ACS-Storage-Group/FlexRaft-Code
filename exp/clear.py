@@ -10,4 +10,4 @@ if __name__ == "__main__":
     servers = util.ParseClusterConfiguration(cfg_file, "-i ~/.ssh/FlexibleK_Experiment.pem")
 
     for server in servers:
-        server.clean()
+        server.clear()
