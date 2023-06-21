@@ -7,6 +7,7 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "client.h"
@@ -103,8 +104,12 @@ void ExecuteBench(kv::KvServiceClient *client, const std::vector<KvPair> &bench)
 
   printf("[Warmup Process Done]\n");
 
+  std::this_thread::sleep_for(std::chrono::seconds(3));
+
   // Abort the old leader
   auto stat = client->Abort();
+
+  std::this_thread::sleep_for(std::chrono::seconds(3));
 
   int succ_cnt = 0;
   // Check if inserted value can be found
