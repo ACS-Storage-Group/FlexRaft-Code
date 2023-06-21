@@ -11,10 +11,10 @@ class Results:
         self.bw = bw
 
 def parse_result(r:str) -> Results:
-    return Results(0, 0, 0)
+    return Results(0)
 
 def run_bench(N:int, f:int, bench_type:str, values:str, op_count:int):
-    print("\nRun benchmark: N={} f={} type = {} values={} write_count={}".format(N, f, bench_type, values, write_count))
+    print("\nRun benchmark: N={} f={} type = {} values={} op_count={}".format(N, f, bench_type, values, op_count))
     cfg_file = "cluster_{}.conf".format(N)
     servers = util.ParseClusterConfiguration(cfg_file, "-i ~/.ssh/FlexibleK_Experiment.pem")
 
@@ -44,7 +44,7 @@ def run_bench(N:int, f:int, bench_type:str, values:str, op_count:int):
     client_cmd = "{} --conf={} --client_num=4 --size={} --op_count={} --type={}".format(
         client_bin, client_cfg, values, op_count, bench_type)
     pr = subprocess.run(client_cmd, stdout=subprocess.PIPE, shell=True)
-    result = Results(0, 0, 0)
+    result = Results(0)
     if pr.returncode != 0:
         print("Execute client failed")
     else:
@@ -71,8 +71,8 @@ if __name__ == "__main__":
 
     results = []
 
-    for bench_type in range(len(bench_types)):
-        results.append(run_bench(N, f, bench_type, value_size, op_count))
+    for i in range(len(bench_types)):
+        results.append(run_bench(N, f, bench_types[i], value_size, op_count))
 
     # output the results
     for i in range(len(values)):

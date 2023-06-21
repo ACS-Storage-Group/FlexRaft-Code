@@ -202,8 +202,6 @@ void ExecuteBench(kv::KvServiceClient *client, int client_id, int interval,
     }
     done_cnt += 1;
     idx += interval;
-    printf("[Client %d] Already Execute %d / %lu\r", client_id, done_cnt,
-           bench.size() / interval);
   }
 
   // Calculate the total throughput
