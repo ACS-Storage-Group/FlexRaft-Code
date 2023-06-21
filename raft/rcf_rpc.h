@@ -45,11 +45,11 @@ struct RPCStats {
 
   std::string ToString() const {
     char buf[512];
-    sprintf(
-        buf,
-        "[Total Time = %llu us][Process Time = %llu us][Transfer Time = %llu us][Args "
-        "size=%luB][Reply size=%luB]",
-        total_time, process_time, total_time - process_time, arg_size, resp_size);
+    sprintf(buf,
+            "[Total Time = %llu us][Process Time = %llu us][Transfer Time = "
+            "%llu us][Args "
+            "size=%luB][Reply size=%luB]",
+            total_time, process_time, total_time - process_time, arg_size, resp_size);
     return std::string(buf);
   }
 };
@@ -64,13 +64,12 @@ struct RPCStatsRecorder {
 
   // Write the results to a specified file
   void Dump(const std::string &dst);
-  void Dump(std::ofstream& of);
+  void Dump(std::ofstream &of);
 
   void Add(const RPCStats &stat) { history_.push_back(stat); }
 
   std::vector<RPCStats> history_;
 };
-
 
 class RaftRPCService {
  public:
@@ -98,8 +97,7 @@ class RCFRpcClient final : public RpcClient {
  public:
   void SetRaftState(RaftState *raft) { raft_ = raft; }
   void Dump(const std::string &filename) { recorder_.Dump(filename); }
-  void Dump(std::ofstream& of) { recorder_.Dump(of); }
-
+  void Dump(std::ofstream &of) { recorder_.Dump(of); }
 
  public:
   void Init() override;
@@ -109,10 +107,8 @@ class RCFRpcClient final : public RpcClient {
   void setState(void *state) override { raft_ = reinterpret_cast<RaftState *>(state); }
 
   void setMaxTransportLength(ClientPtr ptr) {
-    ptr->getClientStub().getTransport().setMaxOutgoingMessageLength(
-        config::kMaxMessageLength);
-    ptr->getClientStub().getTransport().setMaxIncomingMessageLength(
-        config::kMaxMessageLength);
+    ptr->getClientStub().getTransport().setMaxOutgoingMessageLength(config::kMaxMessageLength);
+    ptr->getClientStub().getTransport().setMaxIncomingMessageLength(config::kMaxMessageLength);
   }
 
   void stop() override { stopped_ = true; };
@@ -120,23 +116,20 @@ class RCFRpcClient final : public RpcClient {
 
  private:
   // Callback function
-  static void onRequestVoteComplete(RCF::Future<RCF::ByteBuffer> buf,
-                                    ClientPtr client_ptr, RaftState *raft,
-                                    raft_node_id_t peer);
+  static void onRequestVoteComplete(RCF::Future<RCF::ByteBuffer> buf, ClientPtr client_ptr,
+                                    RaftState *raft, raft_node_id_t peer);
 
-  static void onAppendEntriesComplete(RCF::Future<RCF::ByteBuffer> buf,
-                                      ClientPtr client_ptr, RaftState *raft,
-                                      raft_node_id_t peer, RPCArgStats arg_stats,
-                                      RPCStatsRecorder* recorder);
+  static void onAppendEntriesComplete(RCF::Future<RCF::ByteBuffer> buf, ClientPtr client_ptr,
+                                      RaftState *raft, raft_node_id_t peer, RPCArgStats arg_stats,
+                                      RPCStatsRecorder *recorder);
 
   static void onAppendEntriesCompleteRecordTimer(RCF::Future<RCF::ByteBuffer> buf,
                                                  ClientPtr client_ptr, RaftState *raft,
                                                  raft_node_id_t peer,
                                                  util::AppendEntriesRPCPerfCounter counter);
 
-  static void onRequestFragmentsComplete(RCF::Future<RCF::ByteBuffer> buf,
-                                         ClientPtr client_ptr, RaftState *raft,
-                                         raft_node_id_t peer);
+  static void onRequestFragmentsComplete(RCF::Future<RCF::ByteBuffer> buf, ClientPtr client_ptr,
+                                         RaftState *raft, raft_node_id_t peer);
 
  private:
   RaftState *raft_ = nullptr;

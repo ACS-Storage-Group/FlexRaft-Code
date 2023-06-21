@@ -20,7 +20,7 @@ namespace config {
 static const int kRaftTickBaseInterval = 20;
 }
 class RaftNode {
-public:
+ public:
   struct NodeConfig {
     raft_node_id_t node_id_me;
     std::unordered_map<raft_node_id_t, rpc::NetAddress> servers;
@@ -65,24 +65,20 @@ public:
   RaftState *getRaftState() { return raft_state_; }
   Rsm *getRsm() { return rsm_; }
 
-  ProposeResult Propose(const CommandData &cmd) {
-    return raft_state_->Propose(cmd);
-  }
+  ProposeResult Propose(const CommandData &cmd) { return raft_state_->Propose(cmd); }
 
-  uint64_t CommitLatency(raft_index_t raft_index) {
-    return raft_state_->CommitLatency(raft_index);
-  }
+  uint64_t CommitLatency(raft_index_t raft_index) { return raft_state_->CommitLatency(raft_index); }
 
   // Return the last raft index of this raft node
   raft::raft_index_t LastIndex() const { return raft_state_->LastIndex(); }
 
   bool IsLeader() { return raft_state_->Role() == kLeader; }
 
-private:
+ private:
   void startTickerThread();
   void startApplierThread();
 
-private:
+ private:
   raft_node_id_t node_id_me_;
   std::unordered_map<raft_node_id_t, rpc::NetAddress> servers_;
   RaftState *raft_state_;
@@ -98,4 +94,4 @@ private:
   Rsm *rsm_;
   Storage *storage_;
 };
-} // namespace raft
+}  // namespace raft

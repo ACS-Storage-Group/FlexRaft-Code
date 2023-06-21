@@ -15,17 +15,16 @@ using raft_sequence_t = uint32_t;
 using raft_frag_id_t = uint32_t;
 using raft_encoding_param_t = uint32_t;
 
-
 enum raft_entry_type { kNormal = 0, kFragments = 1, kTypeMax = 2 };
 
 inline const char *EntryTypeToString(const raft_entry_type &type) {
   switch (type) {
-  case (kNormal):
-    return "kNormal";
-  case (kFragments):
-    return "kFragments";
-  default:
-    assert(0);
+    case (kNormal):
+      return "kNormal";
+    case (kFragments):
+      return "kFragments";
+    default:
+      assert(0);
   }
   return "Unknown type";
 }
@@ -61,7 +60,8 @@ inline const char *EntryTypeToString(const raft_entry_type &type) {
 //     }
 //   }
 //
-//   bool operator==(const VersionNumber &rhs) { return this->compare(rhs) == 0; }
+//   bool operator==(const VersionNumber &rhs) { return this->compare(rhs) == 0;
+//   }
 //
 //   std::string ToString() const {
 //     char buf[256];
@@ -96,8 +96,8 @@ inline const char *EntryTypeToString(const raft_entry_type &type) {
 //     char buf[256];
 //     sprintf(buf,
 //             "Version{VersionNumber{Term=%d, Seq=%d}, K=%d, M=%d, FragID=%d}",
-//             GetVersionNumber().Term(), GetVersionNumber().Seq(), GetK(), GetM(),
-//             GetFragmentId());
+//             GetVersionNumber().Term(), GetVersionNumber().Seq(), GetK(),
+//             GetM(), GetFragmentId());
 //     return std::string(buf);
 //   }
 //
@@ -127,11 +127,10 @@ struct ChunkInfo {
   }
 
   bool operator==(const ChunkInfo &rhs) const {
-    return this->GetK() == rhs.GetK() &&
-           this->GetRaftIndex() == rhs.GetRaftIndex();
+    return this->GetK() == rhs.GetK() && this->GetRaftIndex() == rhs.GetRaftIndex();
   }
 };
 
 // Structs that are related to raft core algorithm
 
-} // namespace raft
+}  // namespace raft

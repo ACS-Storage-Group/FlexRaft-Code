@@ -21,31 +21,31 @@ class KvServiceClient {
   static const int kKVRequestTimesoutCnt = 10;
 
  public:
-  KvServiceClient(const KvClusterConfig& config, uint32_t client_id);
+  KvServiceClient(const KvClusterConfig &config, uint32_t client_id);
   ~KvServiceClient();
 
   struct GatherValueTask {
     std::string key;
     raft::raft_index_t read_index;
     raft::raft_node_id_t replied_id;
-    raft::Encoder::EncodingResults* decode_input;
+    raft::Encoder::EncodingResults *decode_input;
     int k, m;
   };
 
   struct GatherValueTaskResults {
-    std::string* value;
+    std::string *value;
     ErrorType err;
   };
 
  public:
-  OperationResults Put(const std::string& key, const std::string& value);
-  OperationResults Get(const std::string&, std::string* value);
-  OperationResults Delete(const std::string& key);
+  OperationResults Put(const std::string &key, const std::string &value);
+  OperationResults Get(const std::string &, std::string *value);
+  OperationResults Delete(const std::string &key);
+  OperationResults Abort();
 
-  void DoGatherValueTask(const GatherValueTask* task, GatherValueTaskResults* res);
+  void DoGatherValueTask(const GatherValueTask *task, GatherValueTaskResults *res);
 
-  static void OnGetValueRpcComplete(RCF::Future<GetValueResponse> ret,
-                                    KvServiceClient* client);
+  static void OnGetValueRpcComplete(RCF::Future<GetValueResponse> ret, KvServiceClient *client);
 
   raft::raft_node_id_t LeaderId() const { return curr_leader_; }
 
@@ -61,35 +61,34 @@ class KvServiceClient {
     }
   };
 
-  static DecodedString DecodeString(std::string* str) {
+  static DecodedString DecodeString(std::string *str) {
     auto bytes = str->c_str();
 
-    int k = *reinterpret_cast<const int*>(bytes);
+    int k = *reinterpret_cast<const int *>(bytes);
     bytes += sizeof(int);
 
-    int m = *reinterpret_cast<const int*>(bytes);
+    int m = *reinterpret_cast<const int *>(bytes);
     bytes += sizeof(int);
 
-    auto frag_id = *reinterpret_cast<const raft::raft_frag_id_t*>(bytes);
+    auto frag_id = *reinterpret_cast<const raft::raft_frag_id_t *>(bytes);
     bytes += sizeof(raft::raft_frag_id_t);
 
     auto remaining_size = str->size() - sizeof(int) * 2 - sizeof(raft::raft_frag_id_t);
-    return DecodedString{k, m, frag_id,
-                         raft::Slice(const_cast<char*>(bytes), remaining_size)};
+    return DecodedString{k, m, frag_id, raft::Slice(const_cast<char *>(bytes), remaining_size)};
   }
 
   uint32_t ClientId() const { return client_id_; }
 
  private:
   raft::raft_node_id_t DetectCurrentLeader();
-  Response WaitUntilRequestDone(const Request& request);
+  Response WaitUntilRequestDone(const Request &request);
   void sleepMs(int cnt) { std::this_thread::sleep_for(std::chrono::milliseconds(cnt)); }
 
  private:
-  rpc::KvServerRPCClient* GetRPCStub(raft::raft_node_id_t id) { return servers_[id]; }
+  rpc::KvServerRPCClient *GetRPCStub(raft::raft_node_id_t id) { return servers_[id]; }
 
  private:
-  std::unordered_map<raft::raft_node_id_t, rpc::KvServerRPCClient*> servers_;
+  std::unordered_map<raft::raft_node_id_t, rpc::KvServerRPCClient *> servers_;
   raft::raft_node_id_t curr_leader_;
   static const raft::raft_node_id_t kNoDetectLeader = -1;
 

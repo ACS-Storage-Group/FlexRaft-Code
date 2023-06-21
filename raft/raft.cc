@@ -29,17 +29,16 @@ RaftState *RaftState::NewRaftState(const RaftConfig &config) {
   Storage::PersistRaftState state;
   // If the storage provides a valid persisted raft state, use this
   // state to initialize this raft state instance
-  if (config.storage != nullptr &&
-      (state = config.storage->PersistState(), state.valid)) {
+  if (config.storage != nullptr && (state = config.storage->PersistState(), state.valid)) {
     ret->SetCurrentTerm(state.persisted_term);
     ret->SetVoteFor(state.persisted_vote_for);
-    LOG(util::kRaft, "S%d Read Persist Term%d VoteFor%d", ret->id_,
-        ret->CurrentTerm(), ret->VoteFor());
+    LOG(util::kRaft, "S%d Read Persist Term%d VoteFor%d", ret->id_, ret->CurrentTerm(),
+        ret->VoteFor());
   } else {
     ret->SetCurrentTerm(0);
     ret->SetVoteFor(kNotVoted);
-    LOG(util::kRaft, "S%d Init with Term%d VoteFor%d", ret->id_,
-        ret->CurrentTerm(), ret->VoteFor());
+    LOG(util::kRaft, "S%d Init with Term%d VoteFor%d", ret->id_, ret->CurrentTerm(),
+        ret->VoteFor());
   }
   // On every boot, the raft peer is set to be follower
   ret->SetRole(kFollower);
@@ -55,14 +54,13 @@ RaftState *RaftState::NewRaftState(const RaftConfig &config) {
   // Construct log manager from persistence storage
   ret->lm_ = LogManager::NewLogManager(config.storage);
 
-  LOG(util::kRaft, "S%d Log Recover from storage LI%d", ret->id_,
-      ret->lm_->LastLogEntryIndex());
+  LOG(util::kRaft, "S%d Log Recover from storage LI%d", ret->id_, ret->lm_->LastLogEntryIndex());
 
   ret->electionTimeLimitMin_ = config.electionTimeMin;
   ret->electionTimeLimitMax_ = config.electionTimeMax;
   ret->rsm_ = config.rsm;
   ret->heartbeatTimeInterval = config::kHeartbeatInterval;
-  ret->storage_ = config.storage; // might be nullptr
+  ret->storage_ = config.storage;  // might be nullptr
 
   ret->last_applied_ = 0;
   ret->commit_index_ = 0;
@@ -91,16 +89,14 @@ void RaftState::Process(RequestVoteArgs *args, RequestVoteReply *reply) {
   live_monitor_.UpdateLiveness(args->candidate_id);
 
   std::scoped_lock<std::mutex> lck(mtx_);
-  LOG(util::kRaft, "S%d RequestVote From S%d AT%d", id_, args->candidate_id,
-      args->term);
+  LOG(util::kRaft, "S%d RequestVote From S%d AT%d", id_, args->candidate_id, args->term);
 
   reply->reply_id = id_;
 
   // The request server has smaller term, just refuse this vote request
   // immediately and return my term to update its term
   if (args->term < CurrentTerm()) {
-    LOG(util::kRaft, "S%d Refuse: Term is bigger(%d>%d)", id_, CurrentTerm(),
-        args->term);
+    LOG(util::kRaft, "S%d Refuse: Term is bigger(%d>%d)", id_, CurrentTerm(), args->term);
     reply->term = CurrentTerm();
     reply->vote_granted = false;
     return;
@@ -146,9 +142,8 @@ void RaftState::Process(AppendEntriesArgs *args, AppendEntriesReply *reply) {
   LOG(util::kRaft,
       "S%d Receive AppendEntries From S%d(EC) (T%d PI=%d PT=%d PK=%d EntCnt=%d "
       "LCommit=%d)",
-      id_, args->leader_id, args->term, args->prev_log_index,
-      args->prev_log_term, args->prev_k, args->entries.size(),
-      args->leader_commit);
+      id_, args->leader_id, args->term, args->prev_log_index, args->prev_log_term, args->prev_k,
+      args->entries.size(), args->leader_commit);
 
   reply->reply_id = id_;
   reply->chunk_info_cnt = 0;
@@ -158,8 +153,8 @@ void RaftState::Process(AppendEntriesArgs *args, AppendEntriesReply *reply) {
     reply->success = false;
     reply->term = CurrentTerm();
     reply->expect_index = 0;
-    LOG(util::kRaft, "S%d reply to S%d with T%d EI%d", id_, args->leader_id,
-        reply->term, reply->expect_index);
+    LOG(util::kRaft, "S%d reply to S%d with T%d EI%d", id_, args->leader_id, reply->term,
+        reply->expect_index);
     return;
   }
 
@@ -177,10 +172,8 @@ void RaftState::Process(AppendEntriesArgs *args, AppendEntriesReply *reply) {
     reply->term = CurrentTerm();
     // The check failes, the leader should send more "previous" entries
     // reply->expect_index = args->prev_log_index;
-    reply->expect_index =
-        std::min(lm_->LastLogEntryIndex() + 1, args->prev_log_index);
-    LOG(util::kRaft, "S%d reply with expect index=%d", id_,
-        reply->expect_index);
+    reply->expect_index = std::min(lm_->LastLogEntryIndex() + 1, args->prev_log_index);
+    LOG(util::kRaft, "S%d reply with expect index=%d", id_, reply->expect_index);
     return;
   }
 
@@ -199,8 +192,7 @@ void RaftState::Process(AppendEntriesArgs *args, AppendEntriesReply *reply) {
     auto update_commit_idx = std::min(args->leader_commit, new_entry_idx);
     SetCommitIndex(std::min(update_commit_idx, lm_->LastLogEntryIndex()));
 
-    LOG(util::kRaft, "S%d Update CommitIndex (%d->%d)", id_, old_commit_idx,
-        CommitIndex());
+    LOG(util::kRaft, "S%d Update CommitIndex (%d->%d)", id_, old_commit_idx, CommitIndex());
   }
 
   // TODO: Notify applier thread to apply newly committed entries to state
@@ -223,8 +215,8 @@ void RaftState::Process(AppendEntriesReply *reply) {
 
   std::scoped_lock<std::mutex> lck(mtx_);
 
-  LOG(util::kRaft, "S%d RECV AE RESP From S%d (Accept%d Expect I%d Term %d)",
-      id_, reply->reply_id, reply->success, reply->expect_index, reply->term);
+  LOG(util::kRaft, "S%d RECV AE RESP From S%d (Accept%d Expect I%d Term %d)", id_, reply->reply_id,
+      reply->success, reply->expect_index, reply->term);
 
   // Check if this reply is expired
   if (Role() != kLeader || reply->term < CurrentTerm()) {
@@ -238,21 +230,19 @@ void RaftState::Process(AppendEntriesReply *reply) {
 
   auto peer_id = reply->reply_id;
   auto node = raft_peer_[peer_id];
-  if (reply->success) { // Requested entries are successfully replicated
+  if (reply->success) {  // Requested entries are successfully replicated
     // Update nextIndex and matchIndex for this server
     auto update_nextIndex = reply->expect_index;
     auto update_matchIndex = update_nextIndex - 1;
 
     if (node->NextIndex() < update_nextIndex) {
       node->SetNextIndex(update_nextIndex);
-      LOG(util::kRaft, "S%d update peer S%d NI%d", id_, peer_id,
-          node->NextIndex());
+      LOG(util::kRaft, "S%d update peer S%d NI%d", id_, peer_id, node->NextIndex());
     }
 
     if (node->MatchIndex() < update_matchIndex) {
       node->SetMatchIndex(update_matchIndex);
-      LOG(util::kRaft, "S%d update peer S%d MI%d", id_, peer_id,
-          node->MatchIndex());
+      LOG(util::kRaft, "S%d update peer S%d MI%d", id_, peer_id, node->MatchIndex());
     }
 
     for (const auto &ci : reply->chunk_infos) {
@@ -263,8 +253,7 @@ void RaftState::Process(AppendEntriesReply *reply) {
 
         // Debug:
         // -----------------------------------------------------------------
-        LOG(util::kRaft, "S%d Update S%d MATCH ChunkInfo: %s", id_, peer_id,
-            ci.ToString().c_str());
+        LOG(util::kRaft, "S%d Update S%d MATCH ChunkInfo: %s", id_, peer_id, ci.ToString().c_str());
         // -----------------------------------------------------------------
       }
     }
@@ -292,8 +281,8 @@ void RaftState::Process(RequestVoteReply *reply) {
 
   std::scoped_lock<std::mutex> lck(mtx_);
 
-  LOG(util::kRaft, "S%d HandleVoteResp from S%d term=%d grant=%d", id_,
-      reply->reply_id, reply->term, reply->vote_granted);
+  LOG(util::kRaft, "S%d HandleVoteResp from S%d term=%d grant=%d", id_, reply->reply_id,
+      reply->term, reply->vote_granted);
 
   // Current raft peer is no longer candidate, or the term is expired
   if (Role() != kCandidate || reply->term < CurrentTerm()) {
@@ -317,16 +306,15 @@ void RaftState::Process(RequestVoteReply *reply) {
   return;
 }
 
-void RaftState::Process(RequestFragmentsArgs *args,
-                        RequestFragmentsReply *reply) {
+void RaftState::Process(RequestFragmentsArgs *args, RequestFragmentsReply *reply) {
   assert(args != nullptr && reply != nullptr);
 
   live_monitor_.UpdateLiveness(args->leader_id);
 
   std::scoped_lock<std::mutex> lck(mtx_);
 
-  LOG(util::kRaft, "S%d RECV ReqFrag From S%d(EC) (T%d SI=%d EI=%d)", id_,
-      args->leader_id, args->term, args->start_index, args->last_index);
+  LOG(util::kRaft, "S%d RECV ReqFrag From S%d(EC) (T%d SI=%d EI=%d)", id_, args->leader_id,
+      args->term, args->start_index, args->last_index);
 
   reply->reply_id = id_;
   reply->start_index = args->start_index;
@@ -337,8 +325,7 @@ void RaftState::Process(RequestFragmentsArgs *args,
     reply->fragments.clear();
     reply->success = false;
 
-    LOG(util::kRaft, "S%d REFUSE ReqFrag: Higher Term(%d>%d)", id_,
-        CurrentTerm(), args->term);
+    LOG(util::kRaft, "S%d REFUSE ReqFrag: Higher Term(%d>%d)", id_, CurrentTerm(), args->term);
     return;
   }
 
@@ -355,8 +342,7 @@ void RaftState::Process(RequestFragmentsArgs *args,
       break;
     }
   }
-  LOG(util::kRaft, "S%d Submit fragments(I%d->I%d)", id_, args->start_index,
-      raft_index - 1);
+  LOG(util::kRaft, "S%d Submit fragments(I%d->I%d)", id_, args->start_index, raft_index - 1);
 
   reply->term = CurrentTerm();
   reply->success = true;
@@ -400,11 +386,11 @@ void RaftState::Process(RequestFragmentsReply *reply) {
 
     // Debug:
     // --------------------------------------------------------------------
-    LOG(util::kRaft, "S%d add Frag at I%d info:%s, FragId=%d", id_,
-        entry.Index(), entry.ToString().c_str(), reply->reply_id);
+    LOG(util::kRaft, "S%d add Frag at I%d info:%s, FragId=%d", id_, entry.Index(),
+        entry.ToString().c_str(), reply->reply_id);
     // --------------------------------------------------------------------
-    preleader_stripe_store_.AddFragments(
-        entry.Index(), entry, static_cast<raft_frag_id_t>(reply->reply_id));
+    preleader_stripe_store_.AddFragments(entry.Index(), entry,
+                                         static_cast<raft_frag_id_t>(reply->reply_id));
     check_idx++;
   }
 
@@ -435,16 +421,15 @@ ProposeResult RaftState::Propose(const CommandData &command) {
   // Record the start time of commiting an entry
   commit_start_time_[entry.Index()] = std::chrono::high_resolution_clock::now();
 
-  LOG(util::kRaft, "S%d Propose at (I%d T%d) (ptr=%p)", id_, next_entry_index,
-      CurrentTerm(), entry.CommandData().data());
+  LOG(util::kRaft, "S%d Propose at (I%d T%d) (ptr=%p)", id_, next_entry_index, CurrentTerm(),
+      entry.CommandData().data());
 
   // Replicate this entry to each of followers
   // replicateEntries();
   ReplicateNewProposeEntry(entry.Index());
 
   if (storage_ != nullptr) {
-    LOG(util::kRaft, "S%d Starts Persisting Propose Entry(I%d)", id_,
-        entry.Index());
+    LOG(util::kRaft, "S%d Starts Persisting Propose Entry(I%d)", id_, entry.Index());
     storage_->AppendEntry(entry);
     storage_->Sync();
     LOG(util::kRaft, "S%d Persist Propose Entry(I%d) Done", id_, entry.Index());
@@ -454,22 +439,19 @@ ProposeResult RaftState::Propose(const CommandData &command) {
 }
 
 bool RaftState::isLogUpToDate(raft_index_t raft_index, raft_term_t raft_term) {
-  LOG(util::kRaft,
-      "S%d CheckLog (LastTerm=%d ArgTerm=%d) (LastIndex=%d ArgIndex=%d)", id_,
+  LOG(util::kRaft, "S%d CheckLog (LastTerm=%d ArgTerm=%d) (LastIndex=%d ArgIndex=%d)", id_,
       lm_->LastLogEntryTerm(), raft_term, lm_->LastLogEntryIndex(), raft_index);
 
   if (raft_term > lm_->LastLogEntryTerm()) {
     return true;
   }
-  if (raft_term == lm_->LastLogEntryTerm() &&
-      raft_index >= lm_->LastLogEntryIndex()) {
+  if (raft_term == lm_->LastLogEntryTerm() && raft_index >= lm_->LastLogEntryIndex()) {
     return true;
   }
   return false;
 }
 
-void RaftState::checkConflictEntryAndAppendNew(AppendEntriesArgs *args,
-                                               AppendEntriesReply *reply) {
+void RaftState::checkConflictEntryAndAppendNew(AppendEntriesArgs *args, AppendEntriesReply *reply) {
   assert(args->entry_cnt == args->entries.size());
   auto old_idx = lm_->LastLogEntryIndex();
   auto array_index = 0;
@@ -488,8 +470,7 @@ void RaftState::checkConflictEntryAndAppendNew(AppendEntriesArgs *args,
         storage_->DeleteEntriesFrom(raft_index);
       }
 
-      LOG(util::kRaft, "S%d Del Entry (%d->%d)", id_, old_last_index,
-          lm_->LastLogEntryIndex());
+      LOG(util::kRaft, "S%d Del Entry (%d->%d)", id_, old_last_index, lm_->LastLogEntryIndex());
       break;
     }
 
@@ -498,8 +479,7 @@ void RaftState::checkConflictEntryAndAppendNew(AppendEntriesArgs *args,
     // Check if we need to overwrite this entry, note that all these entries are
     // aligned with (index, term)
     auto ent = lm_->GetSingleLogEntry(raft_index);
-    if (NeedOverwriteLogEntry(ent->GetChunkInfo(),
-                              args->entries[array_index].GetChunkInfo())) {
+    if (NeedOverwriteLogEntry(ent->GetChunkInfo(), args->entries[array_index].GetChunkInfo())) {
       lm_->OverWriteLogEntry(args->entries[array_index], raft_index);
       if (!do_overwrite) {
         if (storage_) {
@@ -511,8 +491,7 @@ void RaftState::checkConflictEntryAndAppendNew(AppendEntriesArgs *args,
           storage_->AppendEntry(*lm_->GetSingleLogEntry(raft_index));
         }
       }
-      LOG(util::kRaft, "S%d OVERWRITE I%d ConflictIndex=I%d", id_, raft_index,
-          raft_index);
+      LOG(util::kRaft, "S%d OVERWRITE I%d ConflictIndex=I%d", id_, raft_index, raft_index);
     } else {
       // Just simply overwrite version number
       LOG(util::kRaft, "S%d I%d ChunkInfo(%s)", id_, raft_index,
@@ -525,8 +504,8 @@ void RaftState::checkConflictEntryAndAppendNew(AppendEntriesArgs *args,
 
     ent = lm_->GetSingleLogEntry(raft_index);
     reply->chunk_infos.push_back(ent->GetChunkInfo());
-    LOG(util::kRaft, "S%d REPLY (I%d T%d ChunkInfo(%s))", id_, raft_index,
-        ent->Term(), ent->GetChunkInfo().ToString().c_str());
+    LOG(util::kRaft, "S%d REPLY (I%d T%d ChunkInfo(%s))", id_, raft_index, ent->Term(),
+        ent->GetChunkInfo().ToString().c_str());
   }
   // For those new entries
   auto old_last_index = lm_->LastLogEntryIndex();
@@ -544,8 +523,8 @@ void RaftState::checkConflictEntryAndAppendNew(AppendEntriesArgs *args,
     reply->chunk_infos.push_back(reply_chunk_info);
   }
 
-  LOG(util::kRaft, "S%d APPEND(%d->%d) ENTCNT=%d", id_, old_last_index,
-      lm_->LastLogEntryIndex(), args->entries.size());
+  LOG(util::kRaft, "S%d APPEND(%d->%d) ENTCNT=%d", id_, old_last_index, lm_->LastLogEntryIndex(),
+      args->entries.size());
 
   reply->chunk_info_cnt = reply->chunk_infos.size();
 
@@ -577,8 +556,8 @@ void RaftState::tryUpdateCommitIndex() {
       }
       // Debug:
       // ------------------------------------------------------------------------------
-      LOG(util::kRaft, "S%d Last Encoding K: %d S%d REPLY VERSION: %s", id_,
-          commit_require_k, id, node->matchChunkInfo[N].ToString().c_str());
+      LOG(util::kRaft, "S%d Last Encoding K: %d S%d REPLY VERSION: %s", id_, commit_require_k, id,
+          node->matchChunkInfo[N].ToString().c_str());
       // ------------------------------------------------------------------------------
       if (node->matchChunkInfo[N].GetK() == commit_require_k) {
         // The follower replica information matches the last encoding k
@@ -603,8 +582,8 @@ void RaftState::tryUpdateCommitIndex() {
       // !!! Perf: Recoding Commit latency
       if (commit_start_time_.count(N) != 0) {
         auto end = std::chrono::high_resolution_clock::now();
-        auto dura = std::chrono::duration_cast<std::chrono::microseconds>(
-            end - commit_start_time_[N]);
+        auto dura =
+            std::chrono::duration_cast<std::chrono::microseconds>(end - commit_start_time_[N]);
         commit_elapse_time_[N] = dura.count();
       }
     }
@@ -631,8 +610,7 @@ void RaftState::tryApplyLogEntries() {
       // }
 
       rsm_->ApplyLogEntry(ent);
-      LOG(util::kRaft, "S%d Push ent(I%d T%d) to channel", id_, ent.Index(),
-          ent.Term());
+      LOG(util::kRaft, "S%d Push ent(I%d T%d) to channel", id_, ent.Index(), ent.Term());
 
       // !!! [PERF]: Record the end time of commit and calculating the elapse
       // time
@@ -673,13 +651,11 @@ void RaftState::convertToCandidate() {
 }
 
 void RaftState::convertToLeader() {
-  LOG(util::kRaft, "S%d ToLeader(T%d) LI%d", id_, CurrentTerm(),
-      lm_->LastLogEntryIndex());
+  LOG(util::kRaft, "S%d ToLeader(T%d) LI%d", id_, CurrentTerm(), lm_->LastLogEntryIndex());
   SetRole(kLeader);
-  auto preleader_to_leader_dura =
-      util::DurationToMicros(preleader_timepoint_, util::NowTime());
-  printf("S%d PreLeader To Leader (%lu us) Recover %lu entry\n", id_,
-         preleader_to_leader_dura, preleader_recover_ent_cnt_);
+  auto preleader_to_leader_dura = util::DurationToMicros(preleader_timepoint_, util::NowTime());
+  printf("S%d PreLeader To Leader (%lu us) Recover %lu entry\n", id_, preleader_to_leader_dura,
+         preleader_recover_ent_cnt_);
 
   resetNextIndexAndMatchIndex();
 
@@ -692,8 +668,8 @@ void RaftState::convertToLeader() {
 }
 
 void RaftState::convertToPreLeader() {
-  LOG(util::kRaft, "S%d ToPreLeader(T%d) COMMIT I%d LI%d", id_, CurrentTerm(),
-      CommitIndex(), lm_->LastLogEntryIndex());
+  LOG(util::kRaft, "S%d ToPreLeader(T%d) COMMIT I%d LI%d", id_, CurrentTerm(), CommitIndex(),
+      lm_->LastLogEntryIndex());
   SetRole(kPreLeader);
   preleader_timepoint_ = util::NowTime();
 
@@ -745,7 +721,7 @@ void RaftState::startElection() {
 
   // Send out the requests to any other raft peer
   for (auto id : peers_) {
-    if (id == id_) { // Omit self
+    if (id == id_) {  // Omit self
       continue;
     }
     auto rpc_client = rpc_clients_[id];
@@ -771,11 +747,10 @@ void RaftState::collectFragments() {
 
   // Initiate a request fragments task
   auto recover_start_index = CommitIndex() + 1;
-  preleader_stripe_store_.InitRequestFragmentsTask(
-      recover_start_index, lm_->LastLogEntryIndex(), peers_.size() + 1, id_);
+  preleader_stripe_store_.InitRequestFragmentsTask(recover_start_index, lm_->LastLogEntryIndex(),
+                                                   peers_.size() + 1, id_);
   preleader_timer_.Reset();
-  preleader_recover_ent_cnt_ =
-      lm_->LastLogEntryIndex() + 1 - recover_start_index;
+  preleader_recover_ent_cnt_ = lm_->LastLogEntryIndex() + 1 - recover_start_index;
 
   for (int i = 0; i < preleader_stripe_store_.stripes.size(); ++i) {
     raft_index_t r_idx = i + preleader_stripe_store_.start_index;
@@ -793,18 +768,15 @@ void RaftState::collectFragments() {
     stripe.raft_term = ent->Term();
 
     if (ent->Type() == kFragments) {
-      stripe.collected_fragments.insert_or_assign(
-          static_cast<raft_frag_id_t>(id_), *ent);
+      stripe.collected_fragments.insert_or_assign(static_cast<raft_frag_id_t>(id_), *ent);
 
-      LOG(util::kRaft, "S%d Add FragId%d into Stripe I%d", id_,
-          static_cast<raft_frag_id_t>(id_), ent->Index());
+      LOG(util::kRaft, "S%d Add FragId%d into Stripe I%d", id_, static_cast<raft_frag_id_t>(id_),
+          ent->Index());
     } else if (ent->Type() == kNormal) {
       // No need to collect this entry since leader has full entry
-      stripe.collected_fragments.insert_or_assign(
-          static_cast<raft_frag_id_t>(id_), *ent);
+      stripe.collected_fragments.insert_or_assign(static_cast<raft_frag_id_t>(id_), *ent);
 
-      LOG(util::kRaft, "S%d Skip Collecting I%d because of full entry", id_,
-          ent->Index());
+      LOG(util::kRaft, "S%d Skip Collecting I%d because of full entry", id_, ent->Index());
     } else {
       // This ent might be a null entry which carries no data
     }
@@ -828,13 +800,12 @@ void RaftState::collectFragments() {
 void RaftState::resetElectionTimer() {
   srand(id_);
   auto id_rand = rand();
-  srand(time(nullptr) * id_ * id_); // So that we have "true" random number
+  srand(time(nullptr) * id_ * id_);  // So that we have "true" random number
   if (electionTimeLimitMin_ == electionTimeLimitMax_) {
     election_time_out_ = electionTimeLimitMin_;
   } else {
     election_time_out_ =
-        rand() % (electionTimeLimitMax_ - electionTimeLimitMin_) +
-        electionTimeLimitMin_;
+        rand() % (electionTimeLimitMax_ - electionTimeLimitMin_) + electionTimeLimitMin_;
   }
   election_timer_.Reset();
 }
@@ -846,20 +817,20 @@ void RaftState::resetReplicateTimer() { replicate_timer_.Reset(); }
 void RaftState::Tick() {
   std::scoped_lock<std::mutex> lck(mtx_);
   switch (Role()) {
-  case kFollower:
-    tickOnFollower();
-    return;
-  case kCandidate:
-    tickOnCandidate();
-    return;
-  case kPreLeader:
-    tickOnPreLeader();
-    return;
-  case kLeader:
-    tickOnLeader();
-    return;
-  default:
-    assert(0);
+    case kFollower:
+      tickOnFollower();
+      return;
+    case kCandidate:
+      tickOnCandidate();
+      return;
+    case kPreLeader:
+      tickOnPreLeader();
+      return;
+    case kLeader:
+      tickOnLeader();
+      return;
+    default:
+      assert(0);
   }
 }
 
@@ -895,23 +866,20 @@ void RaftState::tickOnLeader() {
 
 void RaftState::PersistRaftState() {
   if (storage_ != nullptr) {
-    storage_->PersistState(
-        Storage::PersistRaftState{true, CurrentTerm(), VoteFor()});
+    storage_->PersistState(Storage::PersistRaftState{true, CurrentTerm(), VoteFor()});
   }
 }
 
 void RaftState::tickOnPreLeader() {
   // LOG(util::kRaft, "S%d TickOnPreLeader", id_);
-  if (preleader_timer_.ElapseMilliseconds() <
-      config::kCollectFragmentsInterval) {
+  if (preleader_timer_.ElapseMilliseconds() < config::kCollectFragmentsInterval) {
     return;
   }
   collectFragments();
   resetPreLeaderTimer();
 }
 
-void RaftState::EncodeRaftEntry(raft_index_t raft_index,
-                                raft_encoding_param_t k,
+void RaftState::EncodeRaftEntry(raft_index_t raft_index, raft_encoding_param_t k,
                                 raft_encoding_param_t m, Stripe *stripe) {
   assert(raft_index <= lm_->LastLogEntryIndex());
   auto ent = lm_->GetSingleLogEntry(raft_index);
@@ -921,8 +889,7 @@ void RaftState::EncodeRaftEntry(raft_index_t raft_index,
   stripe->raft_term = ent->Term();
   stripe->fragments.clear();
 
-  LOG(util::kRaft, "S%d Encode I%d T%d K%d M%d", id_, raft_index,
-      stripe->raft_term, k, m);
+  LOG(util::kRaft, "S%d Encode I%d T%d K%d M%d", id_, raft_index, stripe->raft_term, k, m);
   Encoder::EncodingResults results;
   auto data_to_encode = ent->CommandData().data() + ent->StartOffset();
   auto datasize_to_encode = ent->CommandData().size() - ent->StartOffset();
@@ -938,8 +905,7 @@ void RaftState::EncodeRaftEntry(raft_index_t raft_index,
     encoded_ent.SetStartOffset(ent->StartOffset());
 
     encoded_ent.SetCommandLength(ent->CommandLength());
-    encoded_ent.SetNotEncodedSlice(
-        Slice(ent->CommandData().data(), ent->StartOffset()));
+    encoded_ent.SetNotEncodedSlice(Slice(ent->CommandData().data(), ent->StartOffset()));
     encoded_ent.SetFragmentSlice(frag);
     stripe->fragments[frag_id] = encoded_ent;
   }
@@ -967,11 +933,10 @@ bool RaftState::DecodingRaftEntry(Stripe *stripe, LogEntry *ent) {
 
   int not_encoded_size = stripe->collected_fragments[id].StartOffset();
   int complete_ent_size =
-      not_encoded_size +
-      (stripe->collected_fragments[id].FragmentSlice().size() * k);
+      not_encoded_size + (stripe->collected_fragments[id].FragmentSlice().size() * k);
 
-  LOG(util::kRaft, "S%d Estimate NotEncodeSize=%d CompleteSize=%d", id_,
-      not_encoded_size, complete_ent_size);
+  LOG(util::kRaft, "S%d Estimate NotEncodeSize=%d CompleteSize=%d", id_, not_encoded_size,
+      complete_ent_size);
 
   auto data = new char[complete_ent_size + 16];
   std::memcpy(data, stripe->collected_fragments[id].NotEncodedSlice().data(),
@@ -992,8 +957,7 @@ bool RaftState::DecodingRaftEntry(Stripe *stripe, LogEntry *ent) {
   int decode_size = 0;
   // Specify that decoding data should be written to the data pointer that at
   // not_encoded_size place
-  if (!encoder_.DecodeSliceHelper(input, k, m, data + not_encoded_size,
-                                  &decode_size)) {
+  if (!encoder_.DecodeSliceHelper(input, k, m, data + not_encoded_size, &decode_size)) {
     delete[] data;
     return false;
   }
@@ -1023,8 +987,8 @@ void RaftState::ReplicateNewProposeEntry(raft_index_t raft_index) {
   raft_encoding_param_t encode_k = live_servers - livenessLevel();
   raft_encoding_param_t encode_m = GetClusterServerNumber() - encode_k;
 
-  LOG(util::kRaft, "S%d Estimates %d Alive Servers K:%d M:%d", id_,
-      live_servers, encode_k, encode_m);
+  LOG(util::kRaft, "S%d Estimates %d Alive Servers K:%d M:%d", id_, live_servers, encode_k,
+      encode_m);
 
   // Encode the entry
   auto stripe = new Stripe();
@@ -1039,18 +1003,16 @@ void RaftState::ReplicateNewProposeEntry(raft_index_t raft_index) {
 #endif
   encoded_stripe_.insert_or_assign(raft_index, stripe);
   UpdateLastEncodingK(raft_index, encode_k);
-  LOG(util::kRaft, "S%d Updates I%d Last Encoding K to %d", id_, raft_index,
-      encode_k);
+  LOG(util::kRaft, "S%d Updates I%d Last Encoding K to %d", id_, raft_index, encode_k);
 
   // Coding scheme may need change for previous log entries
   if (live_servers != AliveServersOfLastPoint()) {
-    LOG(util::kRaft, "S%d Estimate Live server %d, LastPoint %d, do reencoding",
-        id_, live_servers, AliveServersOfLastPoint());
+    LOG(util::kRaft, "S%d Estimate Live server %d, LastPoint %d, do reencoding", id_, live_servers,
+        AliveServersOfLastPoint());
     UpdateAliveServers(live_servers);
     MaybeReEncodingAndReplicate();
   } else {
-    LOG(util::kRaft,
-        "S%d Estimate Live server %d, LastPoint %d, Do normal replication", id_,
+    LOG(util::kRaft, "S%d Estimate Live server %d, LastPoint %d, Do normal replication", id_,
         live_servers, AliveServersOfLastPoint());
     // Otherwise send these entries as original raft does
     for (auto peer_id : peers_) {
@@ -1071,8 +1033,8 @@ void RaftState::ReplicateNewProposeEntry(raft_index_t raft_index) {
 void RaftState::ReplicateEntries() {
   LOG(util::kRaft, "S%d ReplicateEntries()", id_);
   auto live_servers = live_monitor_.LiveNumber();
-  LOG(util::kRaft, "S%d Estimate Now Live Servers=%d, Last Point=%d", id_,
-      live_servers, AliveServersOfLastPoint());
+  LOG(util::kRaft, "S%d Estimate Now Live Servers=%d, Last Point=%d", id_, live_servers,
+      AliveServersOfLastPoint());
   if (live_servers != AliveServersOfLastPoint()) {
     UpdateAliveServers(live_servers);
     MaybeReEncodingAndReplicate();
@@ -1096,14 +1058,12 @@ void RaftState::MaybeReEncodingAndReplicate() {
   auto live_servers = live_monitor_.LiveNumber();
   raft_encoding_param_t encode_k = live_servers - livenessLevel();
   raft_encoding_param_t encode_m = GetClusterServerNumber() - encode_k;
-  LOG(util::kRaft, "S%d Estimate %d Server Alive K:%d M:%d", id_, live_servers,
-      encode_k, encode_m);
+  LOG(util::kRaft, "S%d Estimate %d Server Alive K:%d M:%d", id_, live_servers, encode_k, encode_m);
 
   // Step1: ReEncoding all necessary entries from CommitIndex() + 1 to
   // LastIndex()
   auto last_index = lm_->LastLogEntryIndex();
-  for (auto raft_index = CommitIndex() + 1; raft_index <= last_index;
-       ++raft_index) {
+  for (auto raft_index = CommitIndex() + 1; raft_index <= last_index; ++raft_index) {
     // last_k = 0 means this entry has not been encoded yet
     auto last_k = GetLastEncodingK(raft_index);
     if (last_k != 0 && encode_k >= last_k) {
@@ -1114,8 +1074,7 @@ void RaftState::MaybeReEncodingAndReplicate() {
     EncodeRaftEntry(raft_index, encode_k, encode_m, stripe);
     encoded_stripe_.insert_or_assign(raft_index, stripe);
     UpdateLastEncodingK(raft_index, encode_k);
-    LOG(util::kRaft, "S%d Encode Entry I%d with (K%d, M%d)", id_, raft_index,
-        encode_k, encode_m);
+    LOG(util::kRaft, "S%d Encode Entry I%d with (K%d, M%d)", id_, raft_index, encode_k, encode_m);
   }
 
   // Step2: replicate all entries by reversing NextIndex and MatchIndex
@@ -1124,8 +1083,7 @@ void RaftState::MaybeReEncodingAndReplicate() {
       auto peer = raft_peer_[peer_id];
       peer->SetNextIndex(CommitIndex() + 1);
       peer->SetMatchIndex(CommitIndex());
-      LOG(util::kRaft, "S%d REVERSE S%d NI To %d", id_, peer_id,
-          CommitIndex() + 1);
+      LOG(util::kRaft, "S%d REVERSE S%d NI To %d", id_, peer_id, CommitIndex() + 1);
       if (live_monitor_.IsAlive(peer_id)) {
         sendAppendEntries(peer_id);
       } else {
@@ -1265,11 +1223,9 @@ void RaftState::sendHeartBeat(raft_node_id_t peer) {
   auto prev_term = lm_->TermAt(prev_index);
   raft_encoding_param_t prev_k = GetLastEncodingK(prev_index);
 
-  LOG(util::kRaft, "S%d send heartbeat to S%d(I%d->I%d)", id_, peer, next_index,
-      next_index);
-  auto args = AppendEntriesArgs{
-      CurrentTerm(), id_,           prev_index, prev_term,
-      prev_k,        CommitIndex(), 0,          std::vector<LogEntry>()};
+  LOG(util::kRaft, "S%d send heartbeat to S%d(I%d->I%d)", id_, peer, next_index, next_index);
+  auto args = AppendEntriesArgs{CurrentTerm(), id_,           prev_index, prev_term,
+                                prev_k,        CommitIndex(), 0,          std::vector<LogEntry>()};
 
   rpc_clients_[peer]->sendMessage(args);
 }
@@ -1281,14 +1237,12 @@ void RaftState::sendAppendEntries(raft_node_id_t peer) {
   auto prev_term = lm_->TermAt(prev_index);
   auto prev_k = GetLastEncodingK(prev_index);
 
-  auto args = AppendEntriesArgs{CurrentTerm(), id_,    prev_index,
-                                prev_term,     prev_k, CommitIndex()};
+  auto args = AppendEntriesArgs{CurrentTerm(), id_, prev_index, prev_term, prev_k, CommitIndex()};
 
   auto require_entry_cnt = lm_->LastLogEntryIndex() - prev_index;
   args.entries.reserve(require_entry_cnt);
 
-  for (auto raft_index = next_index; raft_index <= lm_->LastLogEntryIndex();
-       ++raft_index) {
+  for (auto raft_index = next_index; raft_index <= lm_->LastLogEntryIndex(); ++raft_index) {
     args.entries.push_back(encoded_stripe_[raft_index]->fragments[peer]);
   }
   LOG(util::kRaft, "S%d AE To S%d (I%d->I%d) at T%d", id_, peer, next_index,
@@ -1302,8 +1256,8 @@ void RaftState::sendAppendEntries(raft_node_id_t peer) {
 
 bool RaftState::containEntry(raft_index_t raft_index, raft_term_t raft_term,
                              raft_encoding_param_t prev_k) {
-  LOG(util::kRaft, "S%d ContainEntry? (LT%d AT%d) (LI%d AI%d))", id_,
-      lm_->LastLogEntryTerm(), raft_term, lm_->LastLogEntryIndex(), raft_index);
+  LOG(util::kRaft, "S%d ContainEntry? (LT%d AT%d) (LI%d AI%d))", id_, lm_->LastLogEntryTerm(),
+      raft_term, lm_->LastLogEntryIndex(), raft_index);
 
   if (raft_index == lm_->LastSnapshotIndex()) {
     return raft_term == lm_->LastSnapshotTerm();
@@ -1349,8 +1303,7 @@ void RaftState::DecodeCollectedStripe() {
     auto r_idx = i + preleader_stripe_store_.start_index;
     if (succ) {
       lm_->OverWriteLogEntry(entry, r_idx);
-      LOG(util::kRaft, "S%d OverWrite Decoded Entry Info:%s", id_,
-          entry.ToString().c_str());
+      LOG(util::kRaft, "S%d OverWrite Decoded Entry Info:%s", id_, entry.ToString().c_str());
       if (storage_ != nullptr) {
         storage_->OverwriteEntry(r_idx, entry);
       }
@@ -1373,8 +1326,7 @@ void RaftState::DecodeCollectedStripe() {
   }
 }
 
-bool RaftState::NeedOverwriteLogEntry(const ChunkInfo &old_info,
-                                      const ChunkInfo &new_info) {
+bool RaftState::NeedOverwriteLogEntry(const ChunkInfo &old_info, const ChunkInfo &new_info) {
   // A smaller k means a newer version of encoded parities
   return new_info.GetK() < old_info.GetK();
 }
@@ -1395,4 +1347,4 @@ bool RaftState::FindFullEntryInStripe(const Stripe *stripe, LogEntry *ent) {
   return false;
 }
 
-} // namespace raft
+}  // namespace raft

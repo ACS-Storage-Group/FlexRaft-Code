@@ -15,7 +15,7 @@ struct KvServiceNodeConfig {
 
 using KvClusterConfig = std::unordered_map<raft::raft_node_id_t, KvServiceNodeConfig>;
 
-std::unordered_map<raft::raft_node_id_t, raft::rpc::NetAddress>
-ConstructRaftClusterConfig(const KvClusterConfig& config);
+std::unordered_map<raft::raft_node_id_t, raft::rpc::NetAddress> ConstructRaftClusterConfig(
+    const KvClusterConfig &config);
 
 }  // namespace kv

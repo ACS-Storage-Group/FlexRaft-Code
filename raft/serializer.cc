@@ -133,27 +133,27 @@ void Serializer::Deserialize(const RCF::ByteBuffer *buffer, AppendEntriesReply *
   }
 }
 
-void Serializer::Serialize(const RequestFragmentsArgs* args, RCF::ByteBuffer *buffer) {
+void Serializer::Serialize(const RequestFragmentsArgs *args, RCF::ByteBuffer *buffer) {
   auto dst = buffer->getPtr();
   std::memcpy(dst, args, sizeof(RequestFragmentsArgs));
 }
 
-void Serializer::Deserialize(const RCF::ByteBuffer* buffer, RequestFragmentsArgs* args) {
+void Serializer::Deserialize(const RCF::ByteBuffer *buffer, RequestFragmentsArgs *args) {
   auto src = buffer->getPtr();
   std::memcpy(args, src, sizeof(RequestFragmentsArgs));
 }
 
-void Serializer::Serialize(const RequestFragmentsReply* reply, RCF::ByteBuffer* buffer) {
+void Serializer::Serialize(const RequestFragmentsReply *reply, RCF::ByteBuffer *buffer) {
   assert(reply->entry_cnt == reply->fragments.size());
   auto dst = buffer->getPtr();
   std::memcpy(dst, reply, kRequestFragmentsReplyHdrSize);
   dst += kRequestFragmentsReplyHdrSize;
-  for (const auto& ent : reply->fragments) {
+  for (const auto &ent : reply->fragments) {
     dst = serialize_logentry_helper(&ent, dst);
   }
 }
 
-void Serializer::Deserialize(const RCF::ByteBuffer* buffer, RequestFragmentsReply* reply) {
+void Serializer::Deserialize(const RCF::ByteBuffer *buffer, RequestFragmentsReply *reply) {
   const char *src = buffer->getPtr();
   std::memcpy(reply, src, kRequestFragmentsReplyHdrSize);
   src += kRequestFragmentsReplyHdrSize;
@@ -181,8 +181,7 @@ const char *Serializer::ParsePrefixLengthSlice(const char *buf, Slice *slice) {
   return buf + size;
 }
 
-const char *Serializer::ParsePrefixLengthSliceWithBound(const char *buf, size_t len,
-                                                        Slice *slice) {
+const char *Serializer::ParsePrefixLengthSliceWithBound(const char *buf, size_t len, Slice *slice) {
   if (len < sizeof(size_t)) {
     return nullptr;
   }
@@ -208,9 +207,7 @@ size_t Serializer::getSerializeSize(const LogEntry &entry) {
 
 size_t Serializer::getSerializeSize(const RequestVoteArgs &args) { return sizeof(args); }
 
-size_t Serializer::getSerializeSize(const RequestVoteReply &reply) {
-  return sizeof(reply);
-}
+size_t Serializer::getSerializeSize(const RequestVoteReply &reply) { return sizeof(reply); }
 
 size_t Serializer::getSerializeSize(const AppendEntriesArgs &args) {
   size_t ret = kAppendEntriesArgsHdrSize;
@@ -227,9 +224,7 @@ size_t Serializer::getSerializeSize(const AppendEntriesReply &reply) {
   return ret;
 }
 
-size_t Serializer::getSerializeSize(const RequestFragmentsArgs &args) {
-  return sizeof(args);
-}
+size_t Serializer::getSerializeSize(const RequestFragmentsArgs &args) { return sizeof(args); }
 
 size_t Serializer::getSerializeSize(const RequestFragmentsReply &reply) {
   size_t ret = kRequestFragmentsReplyHdrSize;

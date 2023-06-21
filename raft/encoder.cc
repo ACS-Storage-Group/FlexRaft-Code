@@ -6,12 +6,12 @@
 namespace raft {
 
 // EncodeSlice should not modify underlying data contained by input slice
-bool Encoder::EncodeSlice(const Slice& slice, int k, int m, EncodingResults* results) {
+bool Encoder::EncodeSlice(const Slice &slice, int k, int m, EncodingResults *results) {
   auto encoding_size = slice.size();
 
   // NOTE: What if encoding_size is not divisible to k?
   auto fragment_size = (encoding_size + k - 1) / k;
-  auto start_ptr = reinterpret_cast<unsigned char*>(slice.data());
+  auto start_ptr = reinterpret_cast<unsigned char *>(slice.data());
 
   // A special case for k = 1, avoiding allocating new memories
   // i.e. The resultant slice is exactly the same as input slice
@@ -40,22 +40,20 @@ bool Encoder::EncodeSlice(const Slice& slice, int k, int m, EncodingResults* res
   ec_init_tables(k, m, &encode_matrix_[k * k], g_tbls);
   ec_encode_data(fragment_size, k, m, g_tbls, encode_input_, encode_output_);
 
-  // write results: for the first k segments, their data is essentially the encoding
-  // input, for the rest m segments, their data is the encoding output
+  // write results: for the first k segments, their data is essentially the
+  // encoding input, for the rest m segments, their data is the encoding output
   for (int i = 0; i < k + m; ++i) {
     if (i < k) {
-      results->insert(
-          {i, Slice(reinterpret_cast<char*>(encode_input_[i]), fragment_size)});
+      results->insert({i, Slice(reinterpret_cast<char *>(encode_input_[i]), fragment_size)});
     } else {
-      results->insert(
-          {i, Slice(reinterpret_cast<char*>(encode_output_[i - k]), fragment_size)});
+      results->insert({i, Slice(reinterpret_cast<char *>(encode_output_[i - k]), fragment_size)});
     }
   }
   return true;
 }
 
-bool Encoder::DecodeSliceHelper(const EncodingResults& fragments, int k, int m,
-                                char* data, int* size) {
+bool Encoder::DecodeSliceHelper(const EncodingResults &fragments, int k, int m, char *data,
+                                int *size) {
   assert(data != nullptr);
   assert(k != 0);
 
@@ -74,10 +72,9 @@ bool Encoder::DecodeSliceHelper(const EncodingResults& fragments, int k, int m,
   }
 
   // construct missing rows and valid rows vector
-  for (const auto& [frag_id, slice] : fragments) {
+  for (const auto &[frag_id, slice] : fragments) {
     if (frag_id < k) {
-      missing_rows_.erase(
-          std::remove(missing_rows_.begin(), missing_rows_.end(), frag_id));
+      missing_rows_.erase(std::remove(missing_rows_.begin(), missing_rows_.end(), frag_id));
     }
     valid_rows_.push_back(frag_id);
   }
@@ -94,7 +91,7 @@ bool Encoder::DecodeSliceHelper(const EncodingResults& fragments, int k, int m,
   // *results = Slice(complete_data, complete_length);
 
   // copy fragments data coming from encoding input to complete data
-  for (const auto& [frag_id, slice] : fragments) {
+  for (const auto &[frag_id, slice] : fragments) {
     if (frag_id < k) {
       // All fragments have the same size
       assert(slice.size() == fragment_size);
@@ -131,23 +128,21 @@ bool Encoder::DecodeSliceHelper(const EncodingResults& fragments, int k, int m,
 
     // Start doing decoding, set input source address and output destination
     for (decltype(missing_rows_.size()) i = 0; i < missing_rows_.size(); ++i) {
-      decode_output_[i] = (unsigned char*)(data + missing_rows_[i] * fragment_size);
+      decode_output_[i] = (unsigned char *)(data + missing_rows_[i] * fragment_size);
     }
 
     auto iter = fragments.begin();
     for (int i = 0; i < k; ++i, ++iter) {
-      decode_input_[i] = reinterpret_cast<unsigned char*>(iter->second.data());
+      decode_input_[i] = reinterpret_cast<unsigned char *>(iter->second.data());
     }
 
-    ec_encode_data(fragment_size, k, missing_rows_.size(), g_tbls, decode_input_,
-                   decode_output_);
+    ec_encode_data(fragment_size, k, missing_rows_.size(), g_tbls, decode_input_, decode_output_);
   }
   return true;
 }
 
-bool Encoder::DecodeSlice(const EncodingResults& fragments, int k, int m,
-                           Slice* results) {
-  // For this special case, directly returns the identical entry. So that 
+bool Encoder::DecodeSlice(const EncodingResults &fragments, int k, int m, Slice *results) {
+  // For this special case, directly returns the identical entry. So that
   // DecodeSlice is a dual form of Encode Slice
   if (k == 1) {
     *results = Slice::Copy(fragments.begin()->second);
@@ -230,7 +225,8 @@ bool Encoder::DecodeSlice(const EncodingResults& fragments, int k, int m,
 //     // Generate the inverse of errors matrix
 //     gf_invert_matrix(errors_matrix_, invert_matrix_, k);
 //
-//     for (decltype(missing_rows_.size()) i = 0; i < missing_rows_.size(); ++i) {
+//     for (decltype(missing_rows_.size()) i = 0; i < missing_rows_.size(); ++i)
+//     {
 //       auto row = missing_rows_[i];
 //       for (int j = 0; j < k; ++j) {
 //         encode_matrix_[i * k + j] = invert_matrix_[row * k + j];
@@ -241,17 +237,20 @@ bool Encoder::DecodeSlice(const EncodingResults& fragments, int k, int m,
 //     ec_init_tables(k, missing_rows_.size(), encode_matrix_, g_tbls);
 //
 //     // Start doing decoding, set input source address and output destination
-//     for (decltype(missing_rows_.size()) i = 0; i < missing_rows_.size(); ++i) {
+//     for (decltype(missing_rows_.size()) i = 0; i < missing_rows_.size(); ++i)
+//     {
 //       decode_output_[i] =
 //           (unsigned char*)(complete_data + missing_rows_[i] * fragment_size);
 //     }
 //
 //     auto iter = fragments.begin();
 //     for (int i = 0; i < k; ++i, ++iter) {
-//       decode_input_[i] = reinterpret_cast<unsigned char*>(iter->second.data());
+//       decode_input_[i] = reinterpret_cast<unsigned
+//       char*>(iter->second.data());
 //     }
 //
-//     ec_encode_data(fragment_size, k, missing_rows_.size(), g_tbls, decode_input_,
+//     ec_encode_data(fragment_size, k, missing_rows_.size(), g_tbls,
+//     decode_input_,
 //                    decode_output_);
 //   }
 //   return true;

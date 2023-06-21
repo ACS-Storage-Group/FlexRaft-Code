@@ -1,9 +1,10 @@
+#include <gflags/gflags.h>
+
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
-#include <gflags/gflags.h>
 #include <iostream>
 #include <string>
 #include <thread>
@@ -21,8 +22,7 @@ DEFINE_string(conf, "", "Path to the configuration file");
 DEFINE_int32(client_num, 0, "Number of concurrent clients");
 DEFINE_string(size, "", "Size of values, e.g. 512, 4K, 1M");
 DEFINE_int32(op_count, 0, "Number of operations to execute");
-DEFINE_string(type, "None",
-              "YCSB benchmark type: YCSB_A, YCSB_B, YCSB_C, YCSB_D, YCSB_F");
+DEFINE_string(type, "None", "YCSB benchmark type: YCSB_A, YCSB_B, YCSB_C, YCSB_D, YCSB_F");
 
 using KvPair = std::pair<std::string, std::string>;
 const int kVerboseInterval = 100;
@@ -42,12 +42,12 @@ enum YCSBBenchType {
 
 static const char *YCSBTypeToString(YCSBOpType type) {
   switch (type) {
-  case kPut:
-    return "Put";
-  case kGet:
-    return "Get";
-  default:
-    assert(false);
+    case kPut:
+      return "Put";
+    case kGet:
+      return "Get";
+    default:
+      assert(false);
   }
 }
 
@@ -102,25 +102,22 @@ AnalysisResults Analysis(const std::vector<OperationStat> &collected_data) {
   uint64_t commit_latency_sum_put = 0, commit_latency_sum_get = 0;
   uint64_t apply_latency_sum_put = 0, apply_latency_sum_get = 0;
   uint64_t put_cnt = 0, get_cnt = 0;
-  std::for_each(collected_data.begin(), collected_data.end(),
-                [&](const OperationStat &stat) {
-                  if (stat.type == kPut) {
-                    op_latency_sum_put += stat.op_latency;
-                    apply_latency_sum_put += stat.apply_latency;
-                    commit_latency_sum_put += stat.commit_latency;
-                    put_cnt += 1;
-                  } else {
-                    op_latency_sum_get += stat.op_latency;
-                    apply_latency_sum_get += stat.apply_latency;
-                    commit_latency_sum_get += stat.commit_latency;
-                    get_cnt += 1;
-                  }
-                });
+  std::for_each(collected_data.begin(), collected_data.end(), [&](const OperationStat &stat) {
+    if (stat.type == kPut) {
+      op_latency_sum_put += stat.op_latency;
+      apply_latency_sum_put += stat.apply_latency;
+      commit_latency_sum_put += stat.commit_latency;
+      put_cnt += 1;
+    } else {
+      op_latency_sum_get += stat.op_latency;
+      apply_latency_sum_get += stat.apply_latency;
+      commit_latency_sum_get += stat.commit_latency;
+      get_cnt += 1;
+    }
+  });
   //  In case divide by zero exception
-  if (put_cnt == 0)
-    put_cnt = 1;
-  if (get_cnt == 0)
-    get_cnt = 1;
+  if (put_cnt == 0) put_cnt = 1;
+  if (get_cnt == 0) get_cnt = 1;
   return AnalysisResults{
       op_latency_sum_put / put_cnt,     commit_latency_sum_put / put_cnt,
       apply_latency_sum_put / put_cnt,  op_latency_sum_get / get_cnt,
@@ -128,8 +125,7 @@ AnalysisResults Analysis(const std::vector<OperationStat> &collected_data) {
   };
 }
 
-void BuildBench(const BenchConfiguration &cfg,
-                std::vector<YCSBOperation> *bench) {
+void BuildBench(const BenchConfiguration &cfg, std::vector<YCSBOperation> *bench) {
   const size_t kKeyRange = 1000;
   ScrambledZipfianGenerator generator(kKeyRange);
   for (int i = 1; i <= cfg.bench_put_cnt; ++i) {
@@ -152,9 +148,7 @@ void BuildBench(const BenchConfiguration &cfg,
 }
 
 void ExecuteBench(kv::KvServiceClient *client, int client_id, int interval,
-                  std::vector<OperationStat> &op_stats,
-                  const std::vector<YCSBOperation> &bench) {
-
+                  std::vector<OperationStat> &op_stats, const std::vector<YCSBOperation> &bench) {
   std::printf("[Start Executing YCSB Benchmark]\n");
   op_stats.reserve(bench.size() / interval + 1);
 
@@ -166,39 +160,37 @@ void ExecuteBench(kv::KvServiceClient *client, int client_id, int interval,
   while (idx < bench.size()) {
     const auto &op = bench[idx];
     switch (op.type) {
-    case kPut: {
-      total_size += (op.key.size() + op.value.size());
+      case kPut: {
+        total_size += (op.key.size() + op.value.size());
 
-      auto start = raft::util::NowTime();
-      auto stat = client->Put(op.key, op.value);
-      auto dura = raft::util::DurationToMicros(start, raft::util::NowTime());
-      if (stat.err == kv::kOk) {
-        op_stats.push_back(OperationStat{kPut, static_cast<uint64_t>(dura),
-                                         stat.commit_elapse_time,
-                                         stat.apply_elapse_time});
-      } else {
-        printf("[Put][Error Number]: %d\n", stat.err);
-        exit(1);
+        auto start = raft::util::NowTime();
+        auto stat = client->Put(op.key, op.value);
+        auto dura = raft::util::DurationToMicros(start, raft::util::NowTime());
+        if (stat.err == kv::kOk) {
+          op_stats.push_back(OperationStat{kPut, static_cast<uint64_t>(dura),
+                                           stat.commit_elapse_time, stat.apply_elapse_time});
+        } else {
+          printf("[Put][Error Number]: %d\n", stat.err);
+          exit(1);
+        }
+        break;
       }
-      break;
-    }
-    case kGet: {
-      std::string get_val;
-      auto start = raft::util::NowTime();
-      auto stat = client->Get(op.key, &get_val);
-      auto dura = raft::util::DurationToMicros(start, raft::util::NowTime());
+      case kGet: {
+        std::string get_val;
+        auto start = raft::util::NowTime();
+        auto stat = client->Get(op.key, &get_val);
+        auto dura = raft::util::DurationToMicros(start, raft::util::NowTime());
 
-      if (stat.err == kv::kOk) {
-        op_stats.push_back(OperationStat{kGet, static_cast<uint64_t>(dura),
-                                         stat.commit_elapse_time,
-                                         stat.apply_elapse_time});
-        total_size += (op.key.size() + get_val.size());
-      } else {
-        printf("[Get][Error Number]: %d\n", stat.err);
-        exit(1);
+        if (stat.err == kv::kOk) {
+          op_stats.push_back(OperationStat{kGet, static_cast<uint64_t>(dura),
+                                           stat.commit_elapse_time, stat.apply_elapse_time});
+          total_size += (op.key.size() + get_val.size());
+        } else {
+          printf("[Get][Error Number]: %d\n", stat.err);
+          exit(1);
+        }
+        break;
       }
-      break;
-    }
     }
     done_cnt += 1;
     idx += interval;
@@ -210,8 +202,7 @@ void ExecuteBench(kv::KvServiceClient *client, int client_id, int interval,
     total_time += op_stat.op_latency;
   }
 
-  double thpt =
-      (static_cast<double>(total_size) / (1024 * 1024)) / total_time * 1e6 * 8;
+  double thpt = (static_cast<double>(total_size) / (1024 * 1024)) / total_time * 1e6 * 8;
   printf("\n[Client %d] Throughput: %.2lf Mbps\n", client_id, thpt);
 }
 
@@ -255,8 +246,7 @@ int main(int argc, char *argv[]) {
   // Do warmup
   auto client = new kv::KvServiceClient(cluster_cfg, 0);
   for (int i = 0; i < 1000; ++i) {
-    auto stat = client->Put(raft::util::MakeKey(i, 64),
-                            raft::util::MakeValue(i, val_size));
+    auto stat = client->Put(raft::util::MakeKey(i, 64), raft::util::MakeValue(i, val_size));
     assert(stat.err == kv::kOk);
   }
   delete client;
@@ -266,9 +256,8 @@ int main(int argc, char *argv[]) {
   for (int i = 1; i <= client_num; ++i) {
     const auto client_id = i;
     auto client = new kv::KvServiceClient(cluster_cfg, client_id);
-    threads[client_id] = std::thread([&]() {
-      ExecuteBench(client, client_id, client_num, stats[client_id], bench);
-    });
+    threads[client_id] = std::thread(
+        [&]() { ExecuteBench(client, client_id, client_num, stats[client_id], bench); });
   }
 
   for (int i = 1; i <= client_num; ++i) {

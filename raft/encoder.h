@@ -53,7 +53,8 @@ struct Stripe {
 //   //
 //   // void Remove(int i) { fragments_.erase(fragments_.begin() + i); }
 //
-//   // Since the stripe may contain entries of different k and m during collecting
+//   // Since the stripe may contain entries of different k and m during
+//   collecting
 //   // fragments process, we need first to filter those entries with different
 //   // metadata.
 //   void Filter();
@@ -86,8 +87,10 @@ struct Stripe {
 //   void Remove(int i) {
 //     // Delete an entry with specific frag id
 //     auto iter =
-//         std::find_if(fragments_.begin(), fragments_.end(), [=](const LogEntry& ent) {
-//           return ent.GetVersion().GetFragmentId() == static_cast<uint16_t>(i);
+//         std::find_if(fragments_.begin(), fragments_.end(), [=](const
+//         LogEntry& ent) {
+//           return ent.GetVersion().GetFragmentId() ==
+//           static_cast<uint16_t>(i);
 //         });
 //     if (iter != fragments_.end()) {
 //       fragments_.erase(iter);
@@ -143,22 +146,21 @@ class Encoder {
     delete[] errors_matrix_;
   }
 
-  Encoder(const Encoder&) = delete;
-  Encoder& operator=(const Encoder&) = delete;
+  Encoder(const Encoder &) = delete;
+  Encoder &operator=(const Encoder &) = delete;
 
  public:
-  // Encode a specified slice into fragments by setting input results vector, parameters
-  // k and m is used to control this encoding process
-  bool EncodeSlice(const Slice& slice, int k, int m, EncodingResults* results);
+  // Encode a specified slice into fragments by setting input results vector,
+  // parameters k and m is used to control this encoding process
+  bool EncodeSlice(const Slice &slice, int k, int m, EncodingResults *results);
 
-  // Decode a set of fragments to generate the full content, the corresponding k and m
-  // parameters should be set before calling this method
-  bool DecodeSlice(const EncodingResults& input, int k, int m, Slice* results);
+  // Decode a set of fragments to generate the full content, the corresponding k
+  // and m parameters should be set before calling this method
+  bool DecodeSlice(const EncodingResults &input, int k, int m, Slice *results);
 
-  // A helper function: Decode entry to a data place specified by data, set the size to 
-  // be data length after decoding
-  bool DecodeSliceHelper(const EncodingResults& input, int k, int m, char* data,
-                         int* size);
+  // A helper function: Decode entry to a data place specified by data, set the
+  // size to be data length after decoding
+  bool DecodeSliceHelper(const EncodingResults &input, int k, int m, char *data, int *size);
 
  private:
   // A built-in encoding matrix space. Since encoding matrix will not be changed
@@ -167,13 +169,13 @@ class Encoder {
   //
   // However, remember to reset the rs matrix coefficients for encode_matrix
   // every time calling EncodeEntry since k, m might have been changed
-  unsigned char* encode_matrix_;
+  unsigned char *encode_matrix_;
 
-  unsigned char* decode_matrix_;
+  unsigned char *decode_matrix_;
 
-  unsigned char* errors_matrix_;
+  unsigned char *errors_matrix_;
 
-  unsigned char* invert_matrix_;
+  unsigned char *invert_matrix_;
 
   // When decoding an array consists of k fragments, we need to check out which
   // rows should be picked in encode matrix and which are not
@@ -181,14 +183,14 @@ class Encoder {
 
   // An array that stores the start pointer of each input fragments to be
   // encoded
-  unsigned char* encode_input_[kMaxK];
+  unsigned char *encode_input_[kMaxK];
 
   // An array that stores the start pointer of each output fragments that have
   // been encoded
-  unsigned char* encode_output_[kMaxM];
+  unsigned char *encode_output_[kMaxM];
 
-  unsigned char* decode_input_[kMaxK];
+  unsigned char *decode_input_[kMaxK];
 
-  unsigned char* decode_output_[kMaxK];
+  unsigned char *decode_output_[kMaxK];
 };
 }  // namespace raft

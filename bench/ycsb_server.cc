@@ -1,6 +1,7 @@
+#include <gflags/gflags.h>
+
 #include <cstdlib>
 #include <fstream>
-#include <gflags/gflags.h>
 #include <iostream>
 #include <string>
 #include <thread>
@@ -18,8 +19,7 @@ int main(int argc, char *argv[]) {
 
   // read configuration from existing files
   if (FLAGS_conf.empty() || FLAGS_id == -1) {
-    printf("Invalid Argument: conf = %s, id = %d\n", FLAGS_conf.c_str(),
-           FLAGS_id);
+    printf("Invalid Argument: conf = %s, id = %d\n", FLAGS_conf.c_str(), FLAGS_id);
     return 1;
   }
   auto cluster_cfg = ParseConfigurationFile(FLAGS_conf);

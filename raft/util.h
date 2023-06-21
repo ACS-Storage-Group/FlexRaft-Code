@@ -1,9 +1,10 @@
 #pragma once
+#include <sys/select.h>
+
 #include <chrono>
 #include <cstdio>
 #include <fstream>
 #include <string>
-#include <sys/select.h>
 
 namespace raft {
 namespace util {
@@ -56,7 +57,7 @@ class Logger {
  public:
   Logger() : startTimePoint_(std::chrono::steady_clock::now()) {}
 
-  void Debug(LogMsgType type, const char* fmt, ...);
+  void Debug(LogMsgType type, const char *fmt, ...);
 
   // Reset the start timepoint of this debugger
   void Reset();
@@ -74,27 +75,21 @@ struct PerfCounter {
 
 class PerfLogger {
  public:
-  PerfLogger(const std::string& perf_file_path) {
-    file_ = new std::ofstream(perf_file_path);
-  }
+  PerfLogger(const std::string &perf_file_path) { file_ = new std::ofstream(perf_file_path); }
 
  public:
-  void Report(const PerfCounter* perf_counter) {
-    *file_ << perf_counter->ToString() << "\n";
-  }
+  void Report(const PerfCounter *perf_counter) { *file_ << perf_counter->ToString() << "\n"; }
 
  private:
-  std::ofstream* file_;
+  std::ofstream *file_;
 };
 
 struct AppendEntriesRPCPerfCounter final : public PerfCounter {
   // Default constructor
   AppendEntriesRPCPerfCounter(uint64_t size)
-      : start_time(std::chrono::high_resolution_clock::now()),
-        transfer_size(size),
-        pass_time(0) {}
+      : start_time(std::chrono::high_resolution_clock::now()), transfer_size(size), pass_time(0) {}
 
-  AppendEntriesRPCPerfCounter(const AppendEntriesRPCPerfCounter& rhs)
+  AppendEntriesRPCPerfCounter(const AppendEntriesRPCPerfCounter &rhs)
       : start_time(rhs.start_time), transfer_size(rhs.transfer_size), pass_time(0) {}
 
   TimePoint start_time;
@@ -110,17 +105,14 @@ struct AppendEntriesRPCPerfCounter final : public PerfCounter {
 
   void Record() override {
     auto end = std::chrono::high_resolution_clock::now();
-    pass_time =
-        std::chrono::duration_cast<std::chrono::microseconds>(end - start_time).count();
+    pass_time = std::chrono::duration_cast<std::chrono::microseconds>(end - start_time).count();
   }
 };
 
 struct PersistencePerfCounter final : public PerfCounter {
   // Default constructor
   PersistencePerfCounter(uint64_t size)
-      : start_time(std::chrono::high_resolution_clock::now()),
-        persist_size(size),
-        pass_time(0) {}
+      : start_time(std::chrono::high_resolution_clock::now()), persist_size(size), pass_time(0) {}
 
   TimePoint start_time;
   uint64_t persist_size;
@@ -128,15 +120,14 @@ struct PersistencePerfCounter final : public PerfCounter {
 
   std::string ToString() const override {
     char buf[512];
-    sprintf(buf, "[PersistencePerfCounter: persist_size(%llu) time(%llu us)]",
-            this->persist_size, this->pass_time);
+    sprintf(buf, "[PersistencePerfCounter: persist_size(%llu) time(%llu us)]", this->persist_size,
+            this->pass_time);
     return std::string(buf);
   }
 
   void Record() override {
     auto end = std::chrono::high_resolution_clock::now();
-    pass_time =
-        std::chrono::duration_cast<std::chrono::microseconds>(end - start_time).count();
+    pass_time = std::chrono::duration_cast<std::chrono::microseconds>(end - start_time).count();
   }
 };
 
@@ -146,22 +137,20 @@ struct RaftAppendEntriesProcessPerfCounter final : public PerfCounter {
   uint64_t pass_time;
 
   RaftAppendEntriesProcessPerfCounter(uint64_t size)
-      : start_time(std::chrono::high_resolution_clock::now()),
-        process_size(size),
-        pass_time(0) {}
+      : start_time(std::chrono::high_resolution_clock::now()), process_size(size), pass_time(0) {}
 
   std::string ToString() const override {
     char buf[512];
     sprintf(buf,
-            "[RaftAppendEntriesProcessPerfCounter: process_size(%llu) time(%llu us)]",
+            "[RaftAppendEntriesProcessPerfCounter: process_size(%llu) "
+            "time(%llu us)]",
             this->process_size, this->pass_time);
     return std::string(buf);
   }
 
   void Record() override {
     auto end = std::chrono::high_resolution_clock::now();
-    pass_time =
-        std::chrono::duration_cast<std::chrono::microseconds>(end - start_time).count();
+    pass_time = std::chrono::duration_cast<std::chrono::microseconds>(end - start_time).count();
   }
 };
 
@@ -172,22 +161,20 @@ struct EncodingEntryPerfCounter final : public PerfCounter {
   uint64_t pass_time;
 
   EncodingEntryPerfCounter(int k, int m)
-      : start_time(std::chrono::high_resolution_clock::now()),
-        encoding_k(k),
-        encoding_m(m) {}
+      : start_time(std::chrono::high_resolution_clock::now()), encoding_k(k), encoding_m(m) {}
 
   std::string ToString() const override {
     char buf[512];
     sprintf(buf,
-            "[EncodingEntryPerfCounter]: encoding_parameters(k=%d m=%d) time(%llu us)]",
+            "[EncodingEntryPerfCounter]: encoding_parameters(k=%d m=%d) "
+            "time(%llu us)]",
             this->encoding_k, this->encoding_m, this->pass_time);
     return std::string(buf);
   }
 
   void Record() override {
     auto end = std::chrono::high_resolution_clock::now();
-    pass_time =
-        std::chrono::duration_cast<std::chrono::microseconds>(end - start_time).count();
+    pass_time = std::chrono::duration_cast<std::chrono::microseconds>(end - start_time).count();
   }
 };
 
@@ -203,17 +190,15 @@ inline std::string MakeValue(uint64_t value_id, size_t value_size) {
   return value;
 }
 
-inline TimePoint NowTime() {
-  return std::chrono::high_resolution_clock::now();
-}
+inline TimePoint NowTime() { return std::chrono::high_resolution_clock::now(); }
 
 inline int64_t DurationToMicros(TimePoint start, TimePoint end) {
-  return std::chrono::duration_cast<std::chrono::microseconds>(end-start).count();
+  return std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
 }
 
 // Use singleton to access the global-only logger
-Logger* LoggerInstance();
-PerfLogger* PerfLoggerInstance();
+Logger *LoggerInstance();
+PerfLogger *PerfLoggerInstance();
 }  // namespace util
 #define LOG(msg_type, format, ...)                  \
   {                                                 \

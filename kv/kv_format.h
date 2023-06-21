@@ -16,8 +16,8 @@ void RawBytesToRequest(char *bytes, Request *request);
 void RaftEntryToRequest(const raft::LogEntry &ent, Request *request);
 
 // Construct a request from raw data bytes
-void RaftEntryToRequest(const raft::LogEntry &ent, Request *request,
-                        raft::raft_node_id_t server_id, int server_num);
+void RaftEntryToRequest(const raft::LogEntry &ent, Request *request, raft::raft_node_id_t server_id,
+                        int server_num);
 
 // Serialize a string to raw bytes specified by buf, returns the next position
 // of last written bytes
@@ -32,4 +32,4 @@ inline char *GetKeyFromPrefixLengthFormat(char *buf, std::string *key) {
   *key = std::string(buf + sizeof(int), key_size);
   return buf + sizeof(int) + key_size;
 }
-} // namespace kv
+}  // namespace kv

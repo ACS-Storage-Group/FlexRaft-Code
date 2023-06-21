@@ -55,8 +55,7 @@ namespace raft {
 // This function is basically only used to test if network transfer is ok
 auto operator==(const LogEntry &lhs, const LogEntry &rhs) -> bool {
   auto hdr_equal = lhs.Index() == rhs.Index() && lhs.Term() == rhs.Term() &&
-                   lhs.Type() == rhs.Type() &&
-                   lhs.GetChunkInfo() == rhs.GetChunkInfo();
+                   lhs.Type() == rhs.Type() && lhs.GetChunkInfo() == rhs.GetChunkInfo();
 
   if (!hdr_equal) {
     return false;
@@ -72,8 +71,7 @@ auto operator==(const LogEntry &lhs, const LogEntry &rhs) -> bool {
     return false;
   }
 
-  auto lhs_full_data = lhs.NotEncodedSlice(),
-       rhs_full_data = rhs.NotEncodedSlice();
+  auto lhs_full_data = lhs.NotEncodedSlice(), rhs_full_data = rhs.NotEncodedSlice();
   auto full_data_equal = !lhs_full_data.valid() && !rhs_full_data.valid();
   if (lhs_full_data.valid() && rhs_full_data.valid()) {
     full_data_equal = lhs_full_data.compare(rhs_full_data) == 0;
@@ -89,4 +87,4 @@ auto operator==(const LogEntry &lhs, const LogEntry &rhs) -> bool {
   }
   return frag_equal;
 }
-} // namespace raft
+}  // namespace raft

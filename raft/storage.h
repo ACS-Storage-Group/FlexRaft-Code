@@ -16,7 +16,7 @@ namespace raft {
 // Storage is an interface used for retriving (and store) persisted raft status
 // including current term, voteFor, persisted log entries
 class Storage {
-public:
+ public:
   struct PersistRaftState {
     // Indicating if this state is valid, for example, when creating
     // a persister on first bootstrap, there is no valid raft state yet
@@ -25,7 +25,7 @@ public:
     raft_node_id_t persisted_vote_for;
   };
 
-public:
+ public:
   // LastIndex returns the raft index of last persisted log entries, if
   // there is no valid log entry, returns 0
   virtual raft_index_t LastIndex() const = 0;
@@ -50,11 +50,10 @@ public:
   // in the next reading. It can be used when an entry deleting occurs
   virtual void SetLastIndex(raft_index_t raft_index) = 0;
 
-  virtual void AppendEntry(const LogEntry& ent) = 0;
+  virtual void AppendEntry(const LogEntry &ent) = 0;
   virtual void OverwriteEntry(raft_index_t raft_index, const LogEntry &ent) = 0;
   virtual void DeleteEntriesFrom(raft_index_t raft_index) = 0;
   virtual void Sync() = 0;
-
 
   virtual ~Storage() = default;
 };
@@ -63,7 +62,7 @@ public:
 // of a persister by place them simply in memory. The test module may feel
 // free to inherit this class and override corresponding methods
 class MemStorage : public Storage {
-public:
+ public:
   raft_index_t LastIndex() const override {
     if (!persisted_entries_.size()) {
       return 0;
@@ -78,9 +77,7 @@ public:
 
   void PersistState(const PersistRaftState &state) override {}
 
-  void LogEntries(std::vector<LogEntry> *entries) override {
-    *entries = persisted_entries_;
-  }
+  void LogEntries(std::vector<LogEntry> *entries) override { *entries = persisted_entries_; }
 
   // Should do nothing
   void PersistEntries(raft_index_t lo, raft_index_t hi,
@@ -88,12 +85,12 @@ public:
 
   void SetLastIndex(raft_index_t raft_index) override {}
 
-  void AppendEntry(const LogEntry& ent) override {}
+  void AppendEntry(const LogEntry &ent) override {}
   void OverwriteEntry(raft_index_t raft_index, const LogEntry &ent) override {}
   void DeleteEntriesFrom(raft_index_t raft_index) override {}
   void Sync() override {}
 
-protected:
+ protected:
   raft_term_t persisted_term_;
   raft_node_id_t persisted_vote_for_;
   std::vector<LogEntry> persisted_entries_;
@@ -114,7 +111,7 @@ class FileStorage : public Storage {
     uint64_t size;
   };
 
-public:
+ public:
   // Create or open an existed log file
   static FileStorage *Open(const std::string &name);
   static void Close(FileStorage *file);
@@ -154,7 +151,7 @@ public:
 
   void Sync() override { PersistHeader(); }
 
-private:
+ private:
   void AllocateNewInternalBuffer(size_t size) {
     if (this->buf_) {
       delete[] buf_;
@@ -189,17 +186,14 @@ private:
 
   void SyncFd(int fd) { ::fsync(fd); }
 
-  void MaybeUpdateLastIndexAndTerm(raft::raft_index_t raft_index,
-                                   raft::raft_term_t raft_term) {
+  void MaybeUpdateLastIndexAndTerm(raft::raft_index_t raft_index, raft::raft_term_t raft_term) {
     if (raft_index > header_.lastLogIndex) {
       header_.lastLogIndex = raft_index;
       header_.lastLogTerm = raft_term;
     }
   }
 
-  void Truncate(uint64_t size) {
-    ftruncate(fd_, size);
-  }
+  void Truncate(uint64_t size) { ftruncate(fd_, size); }
 
   void UpdateExtents(raft_index_t raft_index, EntryExtent extent) {
     extents_.insert_or_assign(raft_index, extent);
@@ -207,17 +201,17 @@ private:
 
   void ConstructExtents();
 
-private:
+ private:
   Header header_;
   int fd_;
-  char *buf_; // Internal buffer
+  char *buf_;  // Internal buffer
   size_t buf_size_;
 
   std::unordered_map<raft_index_t, EntryExtent> extents_;
 
-  static constexpr size_t kInitBufSize = 16 * 1024 * 1024; // 16MB
+  static constexpr size_t kInitBufSize = 16 * 1024 * 1024;  // 16MB
   static const size_t kHeaderSize = sizeof(Header);
   static const size_t kInitExtentsCapacity = 100000;
 };
 
-} // namespace raft
+}  // namespace raft

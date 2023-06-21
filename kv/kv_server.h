@@ -4,12 +4,12 @@
 
 #include "channel.h"
 #include "concurrent_queue.h"
+#include "config.h"
 #include "kv_format.h"
 #include "raft.h"
 #include "raft_node.h"
 #include "raft_type.h"
 #include "storage_engine.h"
-#include "config.h"
 
 namespace kv {
 
@@ -19,28 +19,28 @@ struct KvServerConfig {
 };
 
 class KvServer {
-public:
+ public:
   struct KvRequestApplyResult {
     raft::raft_term_t raft_term;
     ErrorType err;
     std::string value;
-    uint64_t elapse_time; // Time used to apply this entry, in us
+    uint64_t elapse_time;  // Time used to apply this entry, in us
   };
 
   struct ValueGatheringTask {
     std::string key;
     raft::raft_index_t read_index;
     raft::raft_node_id_t replied_id;
-    raft::Encoder::EncodingResults* decode_input;
+    raft::Encoder::EncodingResults *decode_input;
     int k, m;
-  }; 
+  };
 
   struct ValueGatheringTaskResults {
-    std::string* value;
+    std::string *value;
     ErrorType err;
   };
 
-public:
+ public:
   KvServer() = default;
   ~KvServer() {
     delete channel_;
@@ -48,12 +48,13 @@ public:
     delete raft_;
   }
 
-public:
+ public:
   static KvServer *NewKvServer(const KvServerConfig &kv_server_config);
-  static KvServer *NewKvServer(const KvClusterConfig& kv_cluster_config, raft::raft_node_id_t node_id);
+  static KvServer *NewKvServer(const KvClusterConfig &kv_cluster_config,
+                               raft::raft_node_id_t node_id);
 
-public:
-  void DoValueGatheringTask(ValueGatheringTask* task, ValueGatheringTaskResults* res);
+ public:
+  void DoValueGatheringTask(ValueGatheringTask *task, ValueGatheringTaskResults *res);
   void DealWithRequest(const Request *request, Response *resp);
   // Disable this server
 
@@ -71,12 +72,11 @@ public:
 
   raft::raft_index_t LastApplyIndex() { return applied_index_; }
 
-private:
+ private:
   // Check if a log entry has been committed yet
-  bool CheckEntryCommitted(const raft::ProposeResult &pr,
-                           KvRequestApplyResult *apply);
+  bool CheckEntryCommitted(const raft::ProposeResult &pr, KvRequestApplyResult *apply);
 
-public:
+ public:
   // A thread that periodically apply committed raft log entries to KVRsm
   static void ApplyRequestCommandThread(KvServer *server);
 
@@ -85,7 +85,7 @@ public:
     t.detach();
   }
 
-public:
+ public:
   // For test and debug
   void Exit() {
     exit_.store(true);
@@ -107,18 +107,18 @@ public:
 
   int ClusterServerNum() const { return raft_->ClusterServerNum(); }
 
-  auto GetKVPeerServerStub(raft::raft_node_id_t node_id)->void* {
+  auto GetKVPeerServerStub(raft::raft_node_id_t node_id) -> void * {
     if (kv_peers_.count(node_id) == 0) {
       return nullptr;
     }
     return kv_peers_[node_id];
   }
 
-private:
+ private:
   raft::RaftNode *raft_;
 
   // channel is used to interact with lower level raft library
-  Channel *channel_; 
+  Channel *channel_;
   StorageEngine *db_;
 
   // We need a channel that receives apply messages from raft
@@ -137,6 +137,6 @@ private:
 
   // Record the RPC stub for each peer kv server. We can only store void* here
   // to avoid circle reference problem
-  std::unordered_map<raft::raft_node_id_t, void*> kv_peers_;
+  std::unordered_map<raft::raft_node_id_t, void *> kv_peers_;
 };
-} // namespace kv
+}  // namespace kv

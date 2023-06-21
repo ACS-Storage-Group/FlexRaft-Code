@@ -11,7 +11,7 @@
 namespace kv {
 
 class RocksDBEngine final : public StorageEngine {
-public:
+ public:
   explicit RocksDBEngine(const std::string &dbname) {
     rocksdb::Options options;
     options.create_if_missing = true;
@@ -25,9 +25,7 @@ public:
 
   ~RocksDBEngine() { delete dbptr_; }
 
-  std::string EngineName() const override {
-    return std::string("RocksDBEngine");
-  }
+  std::string EngineName() const override { return std::string("RocksDBEngine"); }
 
   bool Put(const std::string &key, const std::string &value) override {
     // NOTE: Should we use wo.sync=true or wo.sync=false, there is a huge
@@ -50,7 +48,7 @@ public:
 
   void Close() override { dbptr_->Close(); }
 
-private:
+ private:
   rocksdb::DB *dbptr_;
 };
 
@@ -87,4 +85,4 @@ StorageEngine *StorageEngine::Warmup(const std::string &dbname) {
 StorageEngine *StorageEngine::NewRocksDBEngine(const std::string &name) {
   return new RocksDBEngine(name);
 }
-} // namespace kv
+}  // namespace kv

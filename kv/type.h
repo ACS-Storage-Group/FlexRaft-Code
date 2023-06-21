@@ -10,7 +10,8 @@ enum RequestType {
   kDelete = 2,
   kGet = 3,
   kDetectLeader = 4,
-  // kUndetermined = 5,
+  kAbort = 5,  // Abort the leader of the raft cluster
+  // kUndetermined = 6,
 };
 
 enum ErrorType {
@@ -32,7 +33,7 @@ struct Request {
   uint32_t sequence;
   std::string key;
   std::string value;  // Ignore it if this request is not Put
-  void serialize(SF::Archive& ar) { ar& type& client_id& sequence& key& value; }
+  void serialize(SF::Archive &ar) { ar &type &client_id &sequence &key &value; }
 };
 
 struct Response {
@@ -41,16 +42,16 @@ struct Response {
   uint32_t sequence;
   ErrorType err;
   raft::raft_term_t raft_term;
-  std::string value;              // Valid if type is Get
-  int k, m;                       // The parameter needed to construct an original value
-  raft::raft_index_t read_index;  // This is valid only when type is Get
+  std::string value;                     // Valid if type is Get
+  int k, m;                              // The parameter needed to construct an original value
+  raft::raft_index_t read_index;         // This is valid only when type is Get
   raft::raft_node_id_t reply_server_id;  // The id of server that makes this response
-  uint64_t apply_elapse_time;   // Time elapsed to apply this entry to state machine
-  uint64_t commit_elapse_time;  // Time elapsed to commit a raft entry: From proposal to
-                                // append it into channel
-  void serialize(SF::Archive& ar) {
-    ar& type& client_id& sequence& err& raft_term& value& k& m& read_index&
-        reply_server_id& apply_elapse_time& commit_elapse_time;
+  uint64_t apply_elapse_time;            // Time elapsed to apply this entry to state machine
+  uint64_t commit_elapse_time;           // Time elapsed to commit a raft entry: From
+                                         // proposal to append it into channel
+  void serialize(SF::Archive &ar) {
+    ar &type &client_id &sequence &err &raft_term &value &k &m &read_index &reply_server_id
+        &apply_elapse_time &commit_elapse_time;
   }
 };
 
@@ -58,14 +59,14 @@ struct Response {
 struct GetValueRequest {
   std::string key;
   raft::raft_index_t read_index;
-  void serialize(SF::Archive& ar) { ar& key& read_index; }
+  void serialize(SF::Archive &ar) { ar &key &read_index; }
 };
 
 struct GetValueResponse {
   std::string value;
   ErrorType err;
   raft::raft_node_id_t reply_server_id;
-  void serialize(SF::Archive& ar) { ar& value& err& reply_server_id; }
+  void serialize(SF::Archive &ar) { ar &value &err &reply_server_id; }
 };
 
 struct RequestWithFragment {
@@ -77,27 +78,24 @@ struct RequestWithFragment {
   int k, m;  // The parameter needed to construct an original value
 };
 
-inline constexpr size_t RequestHdrSize() {
-  return sizeof(RequestType) + sizeof(uint32_t) * 2;
-}
+inline constexpr size_t RequestHdrSize() { return sizeof(RequestType) + sizeof(uint32_t) * 2; }
 
 inline constexpr size_t ResponseHdrSize() {
-  return sizeof(RequestType) + sizeof(uint32_t) * 2 + sizeof(ErrorType) +
-         sizeof(raft::raft_term_t);
+  return sizeof(RequestType) + sizeof(uint32_t) * 2 + sizeof(ErrorType) + sizeof(raft::raft_term_t);
 }
 
 const std::string ToString(RequestType type);
 const std::string ToString(ErrorType type);
-const std::string ToString(const Request& req);
+const std::string ToString(const Request &req);
 
 namespace rpc {
 struct NetAddress {
   std::string ip;
   uint16_t port;
-  bool operator==(const NetAddress& rhs) const {
+  bool operator==(const NetAddress &rhs) const {
     return this->ip == rhs.ip && this->port == rhs.port;
   }
 };
-};
+};  // namespace rpc
 
 }  // namespace kv

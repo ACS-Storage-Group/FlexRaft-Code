@@ -1,5 +1,4 @@
 #include "storage.h"
-#include "util.h"
 
 #include <sys/fcntl.h>
 #include <unistd.h>
@@ -9,6 +8,8 @@
 #include <filesystem>
 #include <fstream>
 #include <ios>
+
+#include "util.h"
 
 static inline size_t alignment(size_t size, size_t align) {
   return ((size - 1) / align + 1) * align;
@@ -150,10 +151,9 @@ void FileStorage::ConstructExtents() {
 
     LogEntry ent;
     auto next = der.deserialize_logentry_helper(buf_, &ent);
-    UpdateExtents(ent.Index(),
-                  EntryExtent{read_off, der.getSerializeSize(ent)});
+    UpdateExtents(ent.Index(), EntryExtent{read_off, der.getSerializeSize(ent)});
     read_off += der.getSerializeSize(ent);
   }
 }
 
-} // namespace raft
+}  // namespace raft

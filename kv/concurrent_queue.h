@@ -19,7 +19,7 @@ class ConcurrentQueue {
   ~ConcurrentQueue() { delete[] elems; }
 
   // [MAY BLOCKED]
-  void Push(const T& ent) {
+  void Push(const T &ent) {
     std::unique_lock<std::mutex> lck(enq_mtx);
     while (size_.load() == capacity_) {
       not_full_condition_.wait(lck);
@@ -52,7 +52,7 @@ class ConcurrentQueue {
   }
 
   // [NOT BLOCK]
-  bool TryPop(T& ent) {
+  bool TryPop(T &ent) {
     std::unique_lock<std::mutex> deq_lock(deq_mtx);
     if (size_.load() == 0) {
       return false;
@@ -74,7 +74,7 @@ class ConcurrentQueue {
   size_t Size() const { return size_.load(); }
 
  private:
-  T* elems;
+  T *elems;
   size_t capacity_;
   int head_, tail_;
   std::atomic<size_t> size_;

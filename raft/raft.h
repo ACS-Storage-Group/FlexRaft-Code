@@ -3,8 +3,8 @@
 #include <cstring>
 #include <map>
 #include <mutex>
-#include <unordered_map>
 #include <set>
+#include <unordered_map>
 
 #include "encoder.h"
 #include "log_entry.h"
@@ -27,13 +27,13 @@ enum RaftRole {
 };
 
 namespace config {
-const int64_t kHeartbeatInterval = 100;        // 100ms
-const int64_t kCollectFragmentsInterval = 100; // 100ms
+const int64_t kHeartbeatInterval = 100;         // 100ms
+const int64_t kCollectFragmentsInterval = 100;  // 100ms
 const int64_t kReplicateInterval = 500;
-const int64_t kElectionTimeoutMin = 500; // 500ms
+const int64_t kElectionTimeoutMin = 500;  // 500ms
 constexpr int kLivenessTimeoutInterval = 200;
-const int64_t kElectionTimeoutMax = 1000; // 800ms
-};                                        // namespace config
+const int64_t kElectionTimeoutMax = 1000;  // 800ms
+};                                         // namespace config
 
 struct RaftConfig {
   // The node id of curernt peer. A node id is the unique identifier to
@@ -67,7 +67,7 @@ struct LivenessMonitor {
   int node_num;
   bool response[kMaxNodeNum];
   uint64_t response_time[kMaxNodeNum];
-  raft_node_id_t me; // current server's id
+  raft_node_id_t me;  // current server's id
   util::Timer timer;
 
   // void Init() { std::memset(response, true, sizeof(response)); }
@@ -91,8 +91,7 @@ struct LivenessMonitor {
     // Update other server's state
     auto elapsed = response_time[id];
     for (int i = 0; i < node_num; ++i) {
-      if (response[i] &&
-          (elapsed - response_time[i]) < config::kLivenessTimeoutInterval) {
+      if (response[i] && (elapsed - response_time[i]) < config::kLivenessTimeoutInterval) {
         response[i] = true;
       } else {
         response[i] = false;
@@ -125,11 +124,11 @@ struct LivenessMonitor {
 };
 
 struct SequenceGenerator {
-public:
+ public:
   void Reset() { seq = 1; }
   uint64_t Next() { return seq++; }
 
-private:
+ private:
   uint64_t seq;
 };
 
@@ -143,8 +142,8 @@ struct PreLeaderStripeStore {
   int node_num;
   raft_node_id_t me;
 
-  void InitRequestFragmentsTask(raft_index_t start, raft_index_t end,
-                                int node_num, raft_node_id_t me) {
+  void InitRequestFragmentsTask(raft_index_t start, raft_index_t end, int node_num,
+                                raft_node_id_t me) {
     this->start_index = start;
     this->end_index = end;
     this->node_num = node_num;
@@ -178,8 +177,7 @@ struct PreLeaderStripeStore {
     return ret;
   }
 
-  void AddFragments(raft_index_t idx, const LogEntry &entry,
-                    raft_frag_id_t chunk_id) {
+  void AddFragments(raft_index_t idx, const LogEntry &entry, raft_frag_id_t chunk_id) {
     if (idx < start_index || idx > end_index) {
       // NOTE: idx > end_index indicates that current leader receives an entry
       // with index higher than leader's last index, in that way, it simply cut
@@ -195,7 +193,7 @@ struct PreLeaderStripeStore {
 // A raft peer maintains the necessary information in terms of "Logic" state
 // of raft algorithm
 class RaftPeer {
-public:
+ public:
   RaftPeer() : next_index_(0), match_index_(0) {}
 
   raft_index_t NextIndex() const { return next_index_; }
@@ -204,24 +202,24 @@ public:
   raft_index_t MatchIndex() const { return match_index_; }
   void SetMatchIndex(raft_index_t match_index) { match_index_ = match_index; }
 
-public:
+ public:
   raft_index_t next_index_, match_index_;
   std::unordered_map<raft_index_t, ChunkInfo> matchChunkInfo;
 };
 
 class RaftState {
-public:
+ public:
   // Construct a RaftState instance from a specified configuration.
   static RaftState *NewRaftState(const RaftConfig &);
   static const raft_node_id_t kNotVoted = -1;
 
-public:
+ public:
   RaftState() = default;
 
   RaftState(const RaftState &) = delete;
   RaftState &operator=(const RaftState &) = delete;
 
-public:
+ public:
   // Process a bunch of RPC request or response, the first parameter is the
   // input of this process, the second parameter is the output.
   void Process(RequestVoteArgs *args, RequestVoteReply *reply);
@@ -243,7 +241,7 @@ public:
     return lm_->LastLogEntryIndex();
   }
 
-public:
+ public:
   // Init all necessary status of raft state, including reset election timer
   void Init();
 
@@ -267,9 +265,7 @@ public:
   void SetCommitIndex(raft_index_t raft_index) { commit_index_ = raft_index; }
 
   raft_index_t LastLogIndex() const { return lm_->LastLogEntryIndex(); }
-  raft_term_t TermAt(raft_index_t raft_index) const {
-    return lm_->TermAt(raft_index);
-  }
+  raft_term_t TermAt(raft_index_t raft_index) const { return lm_->TermAt(raft_index); }
 
   int GetClusterServerNumber() const { return peers_.size() + 1; }
 
@@ -281,15 +277,14 @@ public:
     }
   }
 
-public:
+ public:
   // Check specified raft_index and raft_term is newer than log entries stored
   // in current raft peer. Return true if it is, otherwise returns false
   bool isLogUpToDate(raft_index_t raft_index, raft_term_t raft_term);
 
   // Check if current raft peer has exactly an entry of specified raft_term at
   // specific raft_index
-  bool containEntry(raft_index_t raft_index, raft_term_t raft_term,
-                    raft_encoding_param_t prev_k);
+  bool containEntry(raft_index_t raft_index, raft_term_t raft_term, raft_encoding_param_t prev_k);
 
   // When receiving AppendEntries Reply, the raft peer checks all peers match
   // index condition and may update the commit_index field
@@ -299,14 +294,13 @@ public:
 
   // Encoding specified log entry with encoding parameter k, m, the results is
   // written into specified stripe
-  void EncodeRaftEntry(raft_index_t raft_index, raft_encoding_param_t k,
-                       raft_encoding_param_t m, Stripe *stripe);
+  void EncodeRaftEntry(raft_index_t raft_index, raft_encoding_param_t k, raft_encoding_param_t m,
+                       Stripe *stripe);
 
   // Decoding all fragments contained in a stripe into a complete log entry
   bool DecodingRaftEntry(Stripe *stripe, LogEntry *ent);
 
-  bool NeedOverwriteLogEntry(const ChunkInfo &old_info,
-                             const ChunkInfo &new_info);
+  bool NeedOverwriteLogEntry(const ChunkInfo &old_info, const ChunkInfo &new_info);
 
   void FilterDuplicatedCollectedFragments(Stripe &stripes);
 
@@ -315,8 +309,7 @@ public:
   // Iterate through the entries carried by input args and check if there is
   // conflicting entry: Same index but different term. If there is one, delete
   // all following entries. Add any new entries that are not in raft's log
-  void checkConflictEntryAndAppendNew(AppendEntriesArgs *args,
-                                      AppendEntriesReply *reply);
+  void checkConflictEntryAndAppendNew(AppendEntriesArgs *args, AppendEntriesReply *reply);
 
   // Reset the next index and match index fields when current server becomes
   // leader
@@ -403,24 +396,24 @@ public:
     }
 
     switch (ent->Type()) {
-    case kNormal: {
-      if (last_encoding_.count(raft_index) == 0) {
-        return 0;
+      case kNormal: {
+        if (last_encoding_.count(raft_index) == 0) {
+          return 0;
+        }
+        return last_encoding_[raft_index];
       }
-      return last_encoding_[raft_index];
-    }
-    case kFragments: {
-      return ent->GetChunkInfo().GetK();
-    }
-    default:
-      return 0;
+      case kFragments: {
+        return ent->GetChunkInfo().GetK();
+      }
+      default:
+        return 0;
     }
   }
 
   int AliveServersOfLastPoint() const { return alive_servers_of_last_point_; }
   void UpdateAliveServers(int num) { alive_servers_of_last_point_ = num; }
 
-public:
+ public:
   // For concurrency control. A raft state instance might be accessed via
   // multiple threads, e.g. RPC thread that receives request; The state machine
   // thread that peridically apply committed log entries, and so on
@@ -463,17 +456,17 @@ public:
   // A place for storing fragments come from RequestFragments
   PreLeaderStripeStore preleader_stripe_store_;
 
-public:
+ public:
   std::set<raft_node_id_t> peers_;
-  RaftPeer* raft_peer_[32] = {nullptr};
-  rpc::RpcClient* rpc_clients_[32] = {nullptr};
+  RaftPeer *raft_peer_[32] = {nullptr};
+  rpc::RpcClient *rpc_clients_[32] = {nullptr};
   // std::unordered_map<raft_node_id_t, RaftPeer *> peers_;
   // std::unordered_map<raft_node_id_t, rpc::RpcClient *> rpc_clients_;
 
-  util::Timer election_timer_;  // Record elapse time during election
-  util::Timer heartbeat_timer_; // Record elapse time since last heartbeat
-  util::Timer preleader_timer_; // Record fragments collection time
-  util::Timer replicate_timer_; // Record replication timer
+  util::Timer election_timer_;   // Record elapse time during election
+  util::Timer heartbeat_timer_;  // Record elapse time since last heartbeat
+  util::Timer preleader_timer_;  // Record fragments collection time
+  util::Timer replicate_timer_;  // Record replication timer
 
   // Election time should be between [min, max), set by configuration
   int64_t electionTimeLimitMin_, electionTimeLimitMax_;
@@ -489,7 +482,7 @@ public:
 
   int alive_servers_of_last_point_;
 
-private:
+ private:
   int vote_me_cnt_;
   Rsm *rsm_;
 
@@ -497,4 +490,4 @@ private:
   util::TimePoint preleader_timepoint_;
   uint64_t preleader_recover_ent_cnt_ = 0;
 };
-} // namespace raft
+}  // namespace raft

@@ -81,7 +81,8 @@ struct RequestFragmentsReply {
   raft_term_t term;
 
   // If there is some replied fragment entries, the start index of it, it should
-  // be exactly the same index as that is contained in corresponding RequestFragmentsArgs
+  // be exactly the same index as that is contained in corresponding
+  // RequestFragmentsArgs
   raft_index_t start_index;
 
   // Request Fragments may fail, e.g. If requested server has higher term, which
@@ -95,20 +96,20 @@ struct RequestFragmentsReply {
 // A struct that indicates the command specified by user of the raft cluster
 struct CommandData {
   int start_fragment_offset;
-  // The ownership of data contained in this command_data is handled to Raft, if you
-  // call RaftState->Process(..)
+  // The ownership of data contained in this command_data is handled to Raft, if
+  // you call RaftState->Process(..)
   Slice command_data;
 };
 
 enum {
-  // kAppendEntriesArgsHdrSize = sizeof(raft_term_t) * 2 + sizeof(raft_index_t) * 2 +
+  // kAppendEntriesArgsHdrSize = sizeof(raft_term_t) * 2 + sizeof(raft_index_t)
+  // * 2 +
   // sizeof(uint64_t) * 2 + sizeof(raft_node_id_t)
   kAppendEntriesArgsHdrSize = 32,
   kAppendEntriesReplyHdrSize = sizeof(raft_term_t) + sizeof(int) + sizeof(uint32_t) +
-                               sizeof(raft_node_id_t) + sizeof(raft_index_t) +
-                               sizeof(int),
-  kRequestFragmentsReplyHdrSize = sizeof(raft_node_id_t) + sizeof(raft_term_t) +
-                                  sizeof(raft_index_t) + sizeof(int) * 2,
+                               sizeof(raft_node_id_t) + sizeof(raft_index_t) + sizeof(int),
+  kRequestFragmentsReplyHdrSize =
+      sizeof(raft_node_id_t) + sizeof(raft_term_t) + sizeof(raft_index_t) + sizeof(int) * 2,
 };
 
 }  // namespace raft

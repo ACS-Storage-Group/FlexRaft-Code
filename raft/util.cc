@@ -8,7 +8,7 @@
 namespace raft {
 namespace util {
 
-void Logger::Debug(LogMsgType type, const char* fmt, ...) {
+void Logger::Debug(LogMsgType type, const char *fmt, ...) {
   if (!debugFlag) {
     return;
   }
@@ -26,8 +26,7 @@ void Logger::Debug(LogMsgType type, const char* fmt, ...) {
 
   auto now = std::chrono::steady_clock::now();
   // Log in a granularity of 0.1ms
-  auto elaps =
-      std::chrono::duration_cast<std::chrono::microseconds>(now - startTimePoint_) / 100;
+  auto elaps = std::chrono::duration_cast<std::chrono::microseconds>(now - startTimePoint_) / 100;
 
   va_list vaList;
   va_start(vaList, fmt);
@@ -40,12 +39,12 @@ void Logger::Debug(LogMsgType type, const char* fmt, ...) {
   std::cout << str << std::endl;
 }
 
-Logger* LoggerInstance() {
+Logger *LoggerInstance() {
   static Logger logger;
   return &logger;
 }
 
-PerfLogger* PerfLoggerInstance() {
+PerfLogger *PerfLoggerInstance() {
   static PerfLogger perf_logger("/tmp/perf.log");
   return &perf_logger;
 }

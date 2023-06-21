@@ -14,14 +14,14 @@ namespace raft {
 class Serializer;
 
 class Slice {
-public:
+ public:
   static Slice Copy(const Slice &slice) {
     auto data = new char[slice.size() + 12];
     std::memcpy(data, slice.data(), slice.size());
     return Slice(data, slice.size());
   }
 
-public:
+ public:
   Slice(char *data, size_t size) : data_(data), size_(size) {}
   Slice(const std::string &s) : data_(new char[s.size()]), size_(s.size()) {
     std::memcpy(data_, s.c_str(), size_);
@@ -47,7 +47,7 @@ public:
     return size() > slice.size() ? 1 : -1;
   }
 
-private:
+ private:
   char *data_ = nullptr;
   size_t size_ = 0;
 };
@@ -56,7 +56,7 @@ class Stripe;
 class LogEntry {
   friend class Serializer;
 
-public:
+ public:
   LogEntry() = default;
   LogEntry &operator=(const LogEntry &) = default;
 
@@ -70,16 +70,12 @@ public:
   void SetType(raft_entry_type type) { this->type = type; }
 
   auto GetChunkInfo() const -> ChunkInfo { return chunk_info; }
-  void SetChunkInfo(const ChunkInfo &chunk_info) {
-    this->chunk_info = chunk_info;
-  }
+  void SetChunkInfo(const ChunkInfo &chunk_info) { this->chunk_info = chunk_info; }
 
   auto StartOffset() const -> int { return start_fragment_offset; }
   void SetStartOffset(int off) { start_fragment_offset = off; }
 
-  auto CommandData() const -> Slice {
-    return Type() == kNormal ? command_data_ : Slice();
-  }
+  auto CommandData() const -> Slice { return Type() == kNormal ? command_data_ : Slice(); }
   auto CommandLength() const -> int { return command_size_; }
   void SetCommandLength(int size) { command_size_ = size; }
 
@@ -93,9 +89,7 @@ public:
   }
   void SetNotEncodedSlice(const Slice &slice) { not_encoded_slice_ = slice; }
 
-  auto FragmentSlice() const -> Slice {
-    return Type() == kNormal ? Slice() : fragment_slice_;
-  }
+  auto FragmentSlice() const -> Slice { return Type() == kNormal ? Slice() : fragment_slice_; }
   void SetFragmentSlice(const Slice &slice) { fragment_slice_ = slice; }
 
   // Serialization function required by RCF
@@ -107,17 +101,17 @@ public:
     sprintf(buf,
             "LogEntry{term=%d, index=%d, type=%s, chunkinfo=%s, "
             "commandlen=%d, start_off=%d}",
-            Term(), Index(), EntryTypeToString(Type()),
-            chunk_info.ToString().c_str(), CommandLength(), StartOffset());
+            Term(), Index(), EntryTypeToString(Type()), chunk_info.ToString().c_str(),
+            CommandLength(), StartOffset());
 
     return std::string(buf);
   }
 
-private:
+ private:
   // These three attributes are allocated when creating a command
   raft_term_t term;
   raft_index_t index;
-  raft_entry_type type; // Full entry or fragments
+  raft_entry_type type;  // Full entry or fragments
 
   // Information of this chunk that is contained in this raft entry
   ChunkInfo chunk_info;
@@ -127,10 +121,10 @@ private:
   int start_fragment_offset;
   int command_size_;
 
-  Slice command_data_;      // Spcified by user, valid iff type = normal
-  Slice not_encoded_slice_; // Command data not being encoded
-  Slice fragment_slice_;    // Fragments of encoded data
+  Slice command_data_;       // Spcified by user, valid iff type = normal
+  Slice not_encoded_slice_;  // Command data not being encoded
+  Slice fragment_slice_;     // Fragments of encoded data
 };
 
 auto operator==(const LogEntry &lhs, const LogEntry &rhs) -> bool;
-} // namespace raft
+}  // namespace raft

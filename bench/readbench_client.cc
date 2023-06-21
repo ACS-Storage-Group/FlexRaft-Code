@@ -1,3 +1,5 @@
+#include <gflags/gflags.h>
+
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
@@ -14,6 +16,12 @@
 #include "rpc.h"
 #include "type.h"
 #include "util.h"
+
+DEFINE_string(conf, "", "Path to the cluster configuration file");
+DEFINE_int32(id, -1, "The client Id");
+DEFINE_string(size, "", "The size of the values");
+DEFINE_int32(write_num, 0, "The number of write operations to execute");
+DEFINE_int32(repeated, 1, "The number of repeated read operations to execute");
 
 using KvPair = std::pair<std::string, std::string>;
 const int kVerboseInterval = 100;
@@ -58,19 +66,17 @@ AnalysisResults Analysis(const std::vector<OperationStat> &collected_data) {
   uint64_t op_latency_sum = 0, op_latency_num = 0;
   uint64_t commit_latency_sum = 0, commit_latency_num = 0;
   uint64_t apply_latency_sum = 0, apply_latency_num = 0;
-  std::for_each(collected_data.begin(), collected_data.end(),
-                [&](const OperationStat &stat) {
-                  op_latency_sum += stat.op_latency;
-                  apply_latency_sum += stat.apply_latency;
-                  commit_latency_sum += stat.commit_latency;
-                });
+  std::for_each(collected_data.begin(), collected_data.end(), [&](const OperationStat &stat) {
+    op_latency_sum += stat.op_latency;
+    apply_latency_sum += stat.apply_latency;
+    commit_latency_sum += stat.commit_latency;
+  });
   return AnalysisResults{op_latency_sum / collected_data.size(),
                          commit_latency_sum / collected_data.size(),
                          apply_latency_sum / collected_data.size()};
 }
 
-void BuildBench(const BenchConfiguration &cfg, std::vector<KvPair> *bench,
-                int repeated_read_cnt) {
+void BuildBench(const BenchConfiguration &cfg, std::vector<KvPair> *bench, int repeated_read_cnt) {
   const std::string value_suffix(cfg.bench_put_size, 0);
   for (int i = 1; i <= cfg.bench_put_cnt; ++i) {
     auto key = cfg.key_prefix + std::to_string(i);
@@ -79,46 +85,26 @@ void BuildBench(const BenchConfiguration &cfg, std::vector<KvPair> *bench,
   }
 }
 
-void ExecuteBench(kv::KvServiceClient *client,
-                  const std::vector<KvPair> &bench) {
+void ExecuteBench(kv::KvServiceClient *client, const std::vector<KvPair> &bench) {
   std::vector<OperationStat> op_stats;
   std::vector<OperationStat> recover_op_stats;
   std::vector<OperationStat> fast_op_stats;
 
   std::printf("[Execution Process]\n");
 
-  // for (int i = 0; i < bench.size(); ++i) {
-  //   const auto &p = bench[i];
-  //   auto start = raft::util::NowTime();
-  //   auto stat = client->Put(p.first, p.second);
-  //   auto dura = raft::util::DurationToMicros(start, raft::util::NowTime());
-  //   if (stat.err == kv::kOk) {
-  //     op_stats.push_back(OperationStat{static_cast<uint64_t>(dura),
-  //                                      stat.commit_elapse_time,
-  //                                      stat.apply_elapse_time});
-  //   } else {
-  //     printf("[Error Number]: %d", stat.err);
-  //     break;
-  //   }
-  //   int done_cnt = i + 1;
-  //   if (done_cnt > 0 && done_cnt % kVerboseInterval == 0) {
-  //     std::cout << "\r[Already Execute " << done_cnt << " Ops]" <<
-  //     std::flush;
-  //   }
-  // }
+  // Ingest data to do warm up first:
+  for (const auto &p : bench) {
+    auto stat = client->Put(p.first, p.second);
+    if (stat.err != kv::kOk) {
+      printf("Warmup failed");
+      exit(1);
+    }
+  }
 
-  // puts("");
+  printf("[Warmup Process Done]\n");
 
-  // auto [avg_latency, avg_commit_latency, avg_apply_latency] =
-  //     Analysis(op_stats);
-
-  // printf("[Client Id %d]\n", client->ClientId());
-  // printf("[Results][Succ Cnt=%lu][Average Latency = %llu us][Average Commit "
-  //        "Latency = "
-  //        "%llu us][Average Apply Latency = %llu us]\n",
-  //        op_stats.size(), avg_latency, avg_commit_latency,
-  //        avg_apply_latency);
-  // fflush(stdout);
+  // Abort the old leader
+  auto stat = client->Abort();
 
   int succ_cnt = 0;
   // Check if inserted value can be found
@@ -149,55 +135,39 @@ void ExecuteBench(kv::KvServiceClient *client,
     }
   }
   printf("[Get Results][Succ Count=%d]\n", succ_cnt);
-  auto [avg_latency, avg_commit_latency, avg_apply_latency] =
-      Analysis(op_stats);
+  auto [avg_latency, avg_commit_latency, avg_apply_latency] = Analysis(op_stats);
 
-  auto [recover_read_latency, recover_commit, recover_apply] =
-      Analysis(recover_op_stats);
+  auto [recover_read_latency, recover_commit, recover_apply] = Analysis(recover_op_stats);
   auto [fast_read_latency, fast_commit, fast_apply] = Analysis(fast_op_stats);
 
-  printf("[Results][Succ Get Cnt=%lu][Average Latency = %llu us][Average Commit"
-         "Latency = "
-         "%llu us][Average Apply Latency = %llu us]\n",
-         op_stats.size(), avg_latency, avg_commit_latency, avg_apply_latency);
+  printf("[Results][Succ Get Cnt=%lu][Average Latency = %llu us]", op_stats.size(), avg_latency);
 
-  printf("[Recover Read Results][Succ Get Cnt=%lu][Average Latency = %llu "
-         "us][Average Commit"
-         "Latency = "
-         "%llu us][Average Apply Latency = %llu us]\n",
-         op_stats.size(), recover_read_latency, recover_commit, recover_apply);
+  printf(
+      "[Recover Read Results][Succ Get Cnt=%lu][Recover Read Latency = %llu "
+      "us]",
+      op_stats.size(), recover_read_latency);
 
-  printf("[Fast Read Results][Succ Get Cnt=%lu][Average Latency = %llu "
-         "us][Average "
-         "Commit"
-         "Latency = "
-         "%llu us][Average Apply Latency = %llu us]\n",
-         op_stats.size(), fast_read_latency, fast_commit, fast_apply);
+  printf("[Fast Read Results][Succ Get Cnt=%lu][Fast Read Latency = %llu us]", op_stats.size(),
+         fast_read_latency);
 
   // Dump the results to file
-  std::ofstream of;
-  of.open("results");
-  Dump(op_stats, of);
+  // std::ofstream of;
+  // of.open("results");
+  // Dump(op_stats, of);
 }
 
 int main(int argc, char *argv[]) {
-  if (argc < 4) {
-    std::cerr << "[Error] Expect at least one parameter, get" << argc
-              << std::endl;
-    return 0;
-  }
-  auto cluster_cfg = ParseConfigurationFile(std::string(argv[1]));
-  int client_id = std::stoi(argv[2]);
+  auto cluster_cfg = ParseConfigurationFile(FLAGS_conf);
+  int client_id = FLAGS_id;
 
   auto key_prefix = "key-" + std::to_string(client_id);
   auto value_prefix = "value-" + std::to_string(client_id) + "-";
-  auto val_size = ParseCommandSize(std::string(argv[3]));
-  auto put_cnt = ParseCommandSize(std::string(argv[4]));
-  repeated_read_cnt = std::atoi(argv[5]);
+  auto val_size = ParseCommandSize(FLAGS_size);
+  auto put_cnt = FLAGS_write_num;
+  repeated_read_cnt = FLAGS_repeated;
 
   std::vector<KvPair> bench;
-  auto bench_cfg =
-      BenchConfiguration{key_prefix, value_prefix, put_cnt, val_size};
+  auto bench_cfg = BenchConfiguration{key_prefix, value_prefix, put_cnt, val_size};
   BuildBench(bench_cfg, &bench, repeated_read_cnt);
 
   auto client = new kv::KvServiceClient(cluster_cfg, client_id);

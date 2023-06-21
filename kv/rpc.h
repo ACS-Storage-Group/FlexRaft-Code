@@ -24,7 +24,7 @@ RCF_METHOD_R1(GetValueResponse, GetValue, const GetValueRequest &)
 RCF_END(I_KvServerRPCService)
 
 class KvServerRPCService {
-public:
+ public:
   KvServerRPCService() = default;
   KvServerRPCService(KvServer *server) : server_(server) {}
   Response DealWithRequest(const Request &req) {
@@ -34,8 +34,8 @@ public:
   }
 
   GetValueResponse GetValue(const GetValueRequest &request) {
-    LOG(raft::util::kRaft, "S%d recv GetValue Request: readIndex=%d",
-        server_->Id(), request.read_index);
+    LOG(raft::util::kRaft, "S%d recv GetValue Request: readIndex=%d", server_->Id(),
+        request.read_index);
     raft::util::Timer timer;
     timer.Reset();
     // Spin until the entries before read index have been applied into the DB
@@ -54,7 +54,7 @@ public:
 
   void SetKvServer(KvServer *server) { server_ = server; }
 
-private:
+ private:
   KvServer *server_;
 };
 
@@ -64,10 +64,11 @@ private:
 //
 // Each KvServerRPCClient object responds to a KvNode
 class KvServerRPCClient {
-public:
+ public:
   using ClientPtr = std::shared_ptr<RcfClient<I_KvServerRPCService>>;
   KvServerRPCClient(const NetAddress &net_addr, raft::raft_node_id_t id)
-      : address_(net_addr), id_(id),
+      : address_(net_addr),
+        id_(id),
         client_stub_(RCF::TcpEndpoint(net_addr.ip, net_addr.port)),
         rcf_init_() {
     client_stub_.getClientStub().getTransport().setMaxIncomingMessageLength(
@@ -78,8 +79,7 @@ public:
 
   Response DealWithRequest(const Request &request);
 
-  void GetValue(const GetValueRequest &request,
-                std::function<void(const GetValueResponse &)> cb);
+  void GetValue(const GetValueRequest &request, std::function<void(const GetValueResponse &)> cb);
 
   void onGetValueComplete(RCF::Future<GetValueResponse> ret,
                           std::function<void(const GetValueResponse &)> cb);
@@ -87,11 +87,9 @@ public:
   GetValueResponse GetValue(const GetValueRequest &request);
 
   // Set timeout for this RPC call, a typical value might be 300ms?
-  void SetRPCTimeOutMs(int cnt) {
-    client_stub_.getClientStub().setRemoteCallTimeoutMs(cnt);
-  }
+  void SetRPCTimeOutMs(int cnt) { client_stub_.getClientStub().setRemoteCallTimeoutMs(cnt); }
 
-private:
+ private:
   RCF::RcfInit rcf_init_;
   NetAddress address_;
   raft::raft_node_id_t id_;
@@ -101,20 +99,19 @@ private:
 // Server side of a KvNode, the server calls Start() to continue receive
 // RPC request from client and deal with it.
 class KvServerRPCServer {
-public:
-  KvServerRPCServer(const NetAddress &net_addr, raft::raft_node_id_t id,
-                    KvServerRPCService service)
-      : address_(net_addr), id_(id),
+ public:
+  KvServerRPCServer(const NetAddress &net_addr, raft::raft_node_id_t id, KvServerRPCService service)
+      : address_(net_addr),
+        id_(id),
         server_(RCF::TcpEndpoint(net_addr.ip, net_addr.port)),
         service_(service) {
-    LOG(raft::util::kRaft, "S%d RPC init with (ip=%s port=%d)", id_,
-        net_addr.ip.c_str(), net_addr.port);
+    LOG(raft::util::kRaft, "S%d RPC init with (ip=%s port=%d)", id_, net_addr.ip.c_str(),
+        net_addr.port);
   }
   KvServerRPCServer() = default;
 
   void Start() {
-    server_.getServerTransport().setMaxIncomingMessageLength(
-        raft::rpc::config::kMaxMessageLength);
+    server_.getServerTransport().setMaxIncomingMessageLength(raft::rpc::config::kMaxMessageLength);
     server_.bind<I_KvServerRPCService>(service_);
     server_.start();
   }
@@ -126,7 +123,7 @@ public:
 
   void SetServiceContext(KvServer *server) { service_.SetKvServer(server); }
 
-private:
+ private:
   RCF::RcfInit rcf_init_;
   NetAddress address_;
   raft::raft_node_id_t id_;
@@ -134,5 +131,5 @@ private:
   KvServerRPCService service_;
 };
 
-} // namespace rpc
-} // namespace kv
+}  // namespace rpc
+}  // namespace kv

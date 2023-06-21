@@ -1,12 +1,10 @@
 #include "rcf_rpc.h"
 
 #include <chrono>
-#include <ratio>
-
 #include <cmath>
 #include <ctime>
 #include <fstream>
-
+#include <ratio>
 
 #include "RCF/ByteBuffer.hpp"
 #include "RCF/ClientStub.hpp"
@@ -89,8 +87,8 @@ RCF::ByteBuffer RaftRPCService::RequestFragments(const RCF::ByteBuffer &arg_buf)
 
 RCFRpcClient::RCFRpcClient(const NetAddress &target_address, raft_node_id_t id)
     : target_address_(target_address), id_(id), rcf_init_(), stopped_(false) {
-  LOG(util::kRaft, "S%d init with Raft RPC server(ip=%s port=%d)", id_,
-      target_address_.ip.c_str(), target_address_.port);
+  LOG(util::kRaft, "S%d init with Raft RPC server(ip=%s port=%d)", id_, target_address_.ip.c_str(),
+      target_address_.port);
 }
 
 void RCFRpcClient::Init() {}
@@ -100,8 +98,8 @@ void RCFRpcClient::sendMessage(const RequestVoteArgs &args) {
     return;
   }
 
-  ClientPtr client_ptr(new RcfClient<I_RaftRPCService>(
-      RCF::TcpEndpoint(target_address_.ip, target_address_.port)));
+  ClientPtr client_ptr(
+      new RcfClient<I_RaftRPCService>(RCF::TcpEndpoint(target_address_.ip, target_address_.port)));
 
   setMaxTransportLength(client_ptr);
 
@@ -110,9 +108,7 @@ void RCFRpcClient::sendMessage(const RequestVoteArgs &args) {
   serializer.Serialize(&args, &arg_buf);
 
   RCF::Future<RCF::ByteBuffer> ret;
-  auto cmp_callback = [=]() {
-    onRequestVoteComplete(ret, client_ptr, this->raft_, this->id_);
-  };
+  auto cmp_callback = [=]() { onRequestVoteComplete(ret, client_ptr, this->raft_, this->id_); };
   ret = client_ptr->RequestVote(RCF::AsyncTwoway(cmp_callback), arg_buf);
 }
 
@@ -120,8 +116,8 @@ void RCFRpcClient::sendMessage(const AppendEntriesArgs &args) {
   if (stopped_) {  // Directly return if this client is stopped
     return;
   }
-  ClientPtr client_ptr(new RcfClient<I_RaftRPCService>(
-      RCF::TcpEndpoint(target_address_.ip, target_address_.port)));
+  ClientPtr client_ptr(
+      new RcfClient<I_RaftRPCService>(RCF::TcpEndpoint(target_address_.ip, target_address_.port)));
 
   setMaxTransportLength(client_ptr);
   client_ptr->getClientStubPtr()->setRemoteCallTimeoutMs(config::kRPCTimeout);
@@ -135,20 +131,20 @@ void RCFRpcClient::sendMessage(const AppendEntriesArgs &args) {
   RCF::Future<RCF::ByteBuffer> ret;
 
 #ifdef ENABLE_PERF_RECORDING
-    util::AppendEntriesRPCPerfCounter counter(arg_buf.getLength());
+  util::AppendEntriesRPCPerfCounter counter(arg_buf.getLength());
 #endif
 
   auto cmp_callback = [=]() {
-/*
-#ifdef ENABLE_PERF_RECORDING
-    onAppendEntriesCompleteRecordTimer(ret, client_ptr, this->raft_, this->id_, counter);
-#else
-*/
+    /*
+    #ifdef ENABLE_PERF_RECORDING
+        onAppendEntriesCompleteRecordTimer(ret, client_ptr, this->raft_,
+    this->id_, counter); #else
+    */
     onAppendEntriesComplete(ret, client_ptr, this->raft_, this->id_,
-                          {arg_buf.getLength(), start_time}, &(this->recorder_));
-/*
-#endif
-*/
+                            {arg_buf.getLength(), start_time}, &(this->recorder_));
+    /*
+    #endif
+    */
   };
   ret = client_ptr->AppendEntries(RCF::AsyncTwoway(cmp_callback), arg_buf);
 }
@@ -158,8 +154,8 @@ void RCFRpcClient::sendMessage(const RequestFragmentsArgs &args) {
     return;
   }
 
-  ClientPtr client_ptr(new RcfClient<I_RaftRPCService>(
-      RCF::TcpEndpoint(target_address_.ip, target_address_.port)));
+  ClientPtr client_ptr(
+      new RcfClient<I_RaftRPCService>(RCF::TcpEndpoint(target_address_.ip, target_address_.port)));
 
   setMaxTransportLength(client_ptr);
 
@@ -174,14 +170,12 @@ void RCFRpcClient::sendMessage(const RequestFragmentsArgs &args) {
   ret = client_ptr->RequestFragments(RCF::AsyncTwoway(cmp_callback), arg_buf);
 }
 
-void RCFRpcClient::onRequestVoteComplete(RCF::Future<RCF::ByteBuffer> ret,
-                                         ClientPtr client_ptr, RaftState *raft,
-                                         raft_node_id_t peer) {
+void RCFRpcClient::onRequestVoteComplete(RCF::Future<RCF::ByteBuffer> ret, ClientPtr client_ptr,
+                                         RaftState *raft, raft_node_id_t peer) {
   (void)client_ptr;
   auto ePtr = ret.getAsyncException();
   if (ePtr.get()) {
-    LOG(util::kRPC, "S%d RequestVote RPC Call Error: %s", peer,
-        ePtr->getErrorString().c_str());
+    LOG(util::kRPC, "S%d RequestVote RPC Call Error: %s", peer, ePtr->getErrorString().c_str());
   } else {
     RCF::ByteBuffer ret_buf = *ret;
     RequestVoteReply reply;
@@ -190,16 +184,14 @@ void RCFRpcClient::onRequestVoteComplete(RCF::Future<RCF::ByteBuffer> ret,
   }
 }
 
-void RCFRpcClient::onAppendEntriesComplete(RCF::Future<RCF::ByteBuffer> ret,
-                                           ClientPtr client_ptr, RaftState *raft,
-                                           raft_node_id_t peer, RPCArgStats rpc_stats, 
-                                           RPCStatsRecorder* recorder) {
+void RCFRpcClient::onAppendEntriesComplete(RCF::Future<RCF::ByteBuffer> ret, ClientPtr client_ptr,
+                                           RaftState *raft, raft_node_id_t peer,
+                                           RPCArgStats rpc_stats, RPCStatsRecorder *recorder) {
   (void)client_ptr;
 
   auto ePtr = ret.getAsyncException();
   if (ePtr.get()) {
-    LOG(util::kRPC, "S%d AppendEntries RPC Call Error: %s", peer,
-        ePtr->getErrorString().c_str());
+    LOG(util::kRPC, "S%d AppendEntries RPC Call Error: %s", peer, ePtr->getErrorString().c_str());
   } else {
     auto time = util::DurationToMicros(rpc_stats.start_time, util::NowTime());
 
@@ -212,22 +204,21 @@ void RCFRpcClient::onAppendEntriesComplete(RCF::Future<RCF::ByteBuffer> ret,
 
     // Only record stat that is not heartbeat messages
     if (rpc_stats.arg_size > kAppendEntriesArgsHdrSize) {
-      auto stat = RPCStats{rpc_stats.arg_size, ret_buf.getLength(), time,
-                           time - 0, 0};
+      auto stat = RPCStats{rpc_stats.arg_size, ret_buf.getLength(), time, time - 0, 0};
       recorder->Add(stat);
     }
   }
 }
 
-void RCFRpcClient::onAppendEntriesCompleteRecordTimer(
-    RCF::Future<RCF::ByteBuffer> ret, ClientPtr client_ptr, RaftState *raft,
-    raft_node_id_t peer, util::AppendEntriesRPCPerfCounter counter) {
+void RCFRpcClient::onAppendEntriesCompleteRecordTimer(RCF::Future<RCF::ByteBuffer> ret,
+                                                      ClientPtr client_ptr, RaftState *raft,
+                                                      raft_node_id_t peer,
+                                                      util::AppendEntriesRPCPerfCounter counter) {
   (void)client_ptr;
 
   auto ePtr = ret.getAsyncException();
   if (ePtr.get()) {
-    LOG(util::kRPC, "S%d AppendEntries RPC Call Error: %s", peer,
-        ePtr->getErrorString().c_str());
+    LOG(util::kRPC, "S%d AppendEntries RPC Call Error: %s", peer, ePtr->getErrorString().c_str());
   } else {
     counter.Record();
     PERF_LOG(&counter);
@@ -257,9 +248,7 @@ void RCFRpcClient::onRequestFragmentsComplete(RCF::Future<RCF::ByteBuffer> ret,
 }
 
 RCFRpcServer::RCFRpcServer(const NetAddress &my_address)
-    : rcf_init_(),
-      server_(RCF::TcpEndpoint(my_address.ip, my_address.port)),
-      service_() {}
+    : rcf_init_(), server_(RCF::TcpEndpoint(my_address.ip, my_address.port)), service_() {}
 
 void RCFRpcServer::Start() {
   server_.getServerTransport().setMaxIncomingMessageLength(config::kMaxMessageLength);
@@ -317,11 +306,9 @@ void RPCStatsRecorder::Dump(const std::string &dst) {
 
   of << "[StandardDev Total Time]: " << std::sqrt(total_time_sq_sum / history_.size())
      << "[StandardDev Process Time]: " << std::sqrt(process_time_sq_sum / history_.size())
-     << "[StandardDev Transfer Time]: "
-     << std::sqrt(transfer_time_sq_sum / history_.size());
+     << "[StandardDev Transfer Time]: " << std::sqrt(transfer_time_sq_sum / history_.size());
   of.close();
 }
-
 
 }  // namespace rpc
 }  // namespace raft

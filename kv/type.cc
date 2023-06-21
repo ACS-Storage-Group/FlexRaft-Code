@@ -12,6 +12,8 @@ const std::string ToString(RequestType type) {
       return "Delete";
     case kDetectLeader:
       return "Detect Leader";
+    case kAbort:
+      return "Abort";
   }
   return "UnderterminedRequestType";
 }
@@ -38,7 +40,7 @@ const std::string ToString(ErrorType type) {
   return "UndeterminedErrorType";
 }
 
-const std::string ToString(const Request& req) {
+const std::string ToString(const Request &req) {
   return ToString(req.type) + " " + "(key = " + req.key + " value = " + req.value + ")";
 }
 }  // namespace kv

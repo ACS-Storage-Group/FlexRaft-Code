@@ -1,9 +1,10 @@
+#include <gflags/gflags.h>
+
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
-#include <gflags/gflags.h>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -62,12 +63,11 @@ AnalysisResults Analysis(const std::vector<OperationStat> &collected_data) {
   uint64_t op_latency_sum = 0, op_latency_num = 0;
   uint64_t commit_latency_sum = 0, commit_latency_num = 0;
   uint64_t apply_latency_sum = 0, apply_latency_num = 0;
-  std::for_each(collected_data.begin(), collected_data.end(),
-                [&](const OperationStat &stat) {
-                  op_latency_sum += stat.op_latency;
-                  apply_latency_sum += stat.apply_latency;
-                  commit_latency_sum += stat.commit_latency;
-                });
+  std::for_each(collected_data.begin(), collected_data.end(), [&](const OperationStat &stat) {
+    op_latency_sum += stat.op_latency;
+    apply_latency_sum += stat.apply_latency;
+    commit_latency_sum += stat.commit_latency;
+  });
   return AnalysisResults{op_latency_sum / collected_data.size(),
                          commit_latency_sum / collected_data.size(),
                          apply_latency_sum / collected_data.size()};
@@ -82,8 +82,7 @@ void BuildBench(const BenchConfiguration &cfg, std::vector<KvPair> *bench) {
   }
 }
 
-void ExecuteBench(kv::KvServiceClient *client,
-                  const std::vector<KvPair> &bench) {
+void ExecuteBench(kv::KvServiceClient *client, const std::vector<KvPair> &bench) {
   std::vector<OperationStat> op_stats;
 
   std::printf("[Execution Process]\n");
@@ -94,8 +93,7 @@ void ExecuteBench(kv::KvServiceClient *client,
     auto stat = client->Put(p.first, p.second);
     auto dura = raft::util::DurationToMicros(start, raft::util::NowTime());
     if (stat.err == kv::kOk) {
-      op_stats.push_back(OperationStat{static_cast<uint64_t>(dura),
-                                       stat.commit_elapse_time,
+      op_stats.push_back(OperationStat{static_cast<uint64_t>(dura), stat.commit_elapse_time,
                                        stat.apply_elapse_time});
     } else {
       printf("[Error Number]: %d", stat.err);
@@ -109,14 +107,14 @@ void ExecuteBench(kv::KvServiceClient *client,
 
   puts("");
 
-  auto [avg_latency, avg_commit_latency, avg_apply_latency] =
-      Analysis(op_stats);
+  auto [avg_latency, avg_commit_latency, avg_apply_latency] = Analysis(op_stats);
 
   printf("[Client Id %d]\n", client->ClientId());
-  printf("[Results][Succ Cnt=%lu][Average Latency = %llu us][Average Commit "
-         "Latency = "
-         "%llu us][Average Apply Latency = %llu us]\n",
-         op_stats.size(), avg_latency, avg_commit_latency, avg_apply_latency);
+  printf(
+      "[Results][Succ Cnt=%lu][Average Latency = %llu us][Average Commit "
+      "Latency = "
+      "%llu us][Average Apply Latency = %llu us]\n",
+      op_stats.size(), avg_latency, avg_commit_latency, avg_apply_latency);
   fflush(stdout);
 
   int succ_cnt = 0;
@@ -151,8 +149,7 @@ int main(int argc, char *argv[]) {
   auto put_cnt = FLAGS_write_num;
 
   std::vector<KvPair> bench;
-  auto bench_cfg =
-      BenchConfiguration{key_prefix, value_prefix, put_cnt, val_size};
+  auto bench_cfg = BenchConfiguration{key_prefix, value_prefix, put_cnt, val_size};
   BuildBench(bench_cfg, &bench);
 
   auto client = new kv::KvServiceClient(cluster_cfg, client_id);

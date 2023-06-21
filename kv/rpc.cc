@@ -41,13 +41,11 @@ GetValueResponse KvServerRPCClient::GetValue(const GetValueRequest &request) {
 }
 
 // Asynchronous call GetValue
-void KvServerRPCClient::GetValue(
-    const GetValueRequest &request,
-    std::function<void(const GetValueResponse &)> cb) {
-  ClientPtr client_ptr(new RcfClient<I_KvServerRPCService>(
-      RCF::TcpEndpoint(address_.ip, address_.port)));
-  client_ptr->getClientStub().getTransport().setMaxOutgoingMessageLength(
-      512 * 1024 * 1024);
+void KvServerRPCClient::GetValue(const GetValueRequest &request,
+                                 std::function<void(const GetValueResponse &)> cb) {
+  ClientPtr client_ptr(
+      new RcfClient<I_KvServerRPCService>(RCF::TcpEndpoint(address_.ip, address_.port)));
+  client_ptr->getClientStub().getTransport().setMaxOutgoingMessageLength(512 * 1024 * 1024);
   client_ptr->getClientStub().setRemoteCallTimeoutMs(900);
 
   RCF::Future<GetValueResponse> ret;
@@ -56,16 +54,14 @@ void KvServerRPCClient::GetValue(
   LOG(raft::util::kRaft, "KvServerRPCClient::GetValue request sent");
 }
 
-void KvServerRPCClient::onGetValueComplete(
-    RCF::Future<GetValueResponse> ret,
-    std::function<void(const GetValueResponse &)> cb) {
+void KvServerRPCClient::onGetValueComplete(RCF::Future<GetValueResponse> ret,
+                                           std::function<void(const GetValueResponse &)> cb) {
   auto ePtr = ret.getAsyncException();
   if (ePtr.get()) {
-    LOG(raft::util::kRaft, "GetValue RPC Call Error: %s",
-        ePtr->getErrorString().c_str());
+    LOG(raft::util::kRaft, "GetValue RPC Call Error: %s", ePtr->getErrorString().c_str());
   } else {
     cb(*ret);
   }
 }
-} // namespace rpc
-} // namespace kv
+}  // namespace rpc
+}  // namespace kv

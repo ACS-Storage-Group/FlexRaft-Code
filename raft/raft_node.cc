@@ -13,7 +13,7 @@
 
 namespace raft {
 
-RaftNode::RaftNode(const NodeConfig& node_config)
+RaftNode::RaftNode(const NodeConfig &node_config)
     : node_id_me_(node_config.node_id_me),
       servers_(node_config.servers),
       raft_state_(nullptr),
@@ -31,24 +31,21 @@ void RaftNode::Init() {
   rcf_server_->Start();
 
   // Create an RPC client that is able to send RPC request to remote server
-  for (const auto& [id, addr] : servers_) {
+  for (const auto &[id, addr] : servers_) {
     if (id != node_id_me_) {
       rcf_clients_.insert({id, new rpc::RCFRpcClient(addr, id)});
     }
   }
 
   // Create Raft State instance
-  RaftConfig config = RaftConfig{node_id_me_,
-                                 rcf_clients_,
-                                 storage_,
-                                 config::kElectionTimeoutMin,
-                                 config::kElectionTimeoutMax,
-                                 rsm_};
+  RaftConfig config = RaftConfig{
+      node_id_me_, rcf_clients_, storage_, config::kElectionTimeoutMin, config::kElectionTimeoutMax,
+      rsm_};
   raft_state_ = RaftState::NewRaftState(config);
 
   // Set related state for all RPC related struct
   rcf_server_->setState(raft_state_);
-  for (auto& [_, client] : rcf_clients_) {
+  for (auto &[_, client] : rcf_clients_) {
     client->setState(raft_state_);
   }
 
@@ -67,8 +64,8 @@ void RaftNode::Start() {
 }
 
 void RaftNode::Exit() {
-  // First ensures ticker thread and applier thread exits, in case they access raft_state
-  // field after we release it
+  // First ensures ticker thread and applier thread exits, in case they access
+  // raft_state field after we release it
   this->exit_.store(true);
   std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
@@ -80,7 +77,7 @@ void RaftNode::Exit() {
 
 RaftNode::~RaftNode() {
   delete raft_state_;
-  for (auto& [_, client] : rcf_clients_) {
+  for (auto &[_, client] : rcf_clients_) {
     delete client;
   }
   // delete rcf_server_;
@@ -92,8 +89,7 @@ void RaftNode::startTickerThread() {
       // Tick the raft state for every 10ms so that the raft can make progress
       // std::this_thread::sleep_for(std::chrono::milliseconds(10));
       this->raft_state_->Tick();
-      std::this_thread::sleep_for(
-          std::chrono::milliseconds(config::kRaftTickBaseInterval));
+      std::this_thread::sleep_for(std::chrono::milliseconds(config::kRaftTickBaseInterval));
     }
   };
   std::thread ticker_thread(ticker);

@@ -23,19 +23,17 @@ void RequestToRawBytes(const Request &request, char *bytes) {
 
 void RawBytesToRequest(char *bytes, Request *request) {
   std::memcpy(request, bytes, RequestHdrSize());
-  bytes =
-      GetKeyFromPrefixLengthFormat(bytes + RequestHdrSize(), &(request->key));
+  bytes = GetKeyFromPrefixLengthFormat(bytes + RequestHdrSize(), &(request->key));
   GetKeyFromPrefixLengthFormat(bytes, &(request->value));
 }
 
-void RaftEntryToRequest(const raft::LogEntry &ent, Request *request,
-                        raft::raft_node_id_t server_id, int server_num) {
+void RaftEntryToRequest(const raft::LogEntry &ent, Request *request, raft::raft_node_id_t server_id,
+                        int server_num) {
   if (ent.Type() == raft::kNormal) {
     auto bytes = ent.CommandData().data();
     std::memcpy(request, bytes, RequestHdrSize());
 
-    bytes =
-        GetKeyFromPrefixLengthFormat(bytes + RequestHdrSize(), &(request->key));
+    bytes = GetKeyFromPrefixLengthFormat(bytes + RequestHdrSize(), &(request->key));
 
     char tmp_data[12];
     *reinterpret_cast<int *>(tmp_data) = 1;
@@ -49,8 +47,7 @@ void RaftEntryToRequest(const raft::LogEntry &ent, Request *request,
     LOG(raft::util::kRaft, "RaftEnt To Request: k=%d,m=%d,frag_id=%d", 1, 0, 0);
 
     // value would be the prefix length key format
-    auto remaining_size =
-        ent.CommandData().size() - (bytes - ent.CommandData().data());
+    auto remaining_size = ent.CommandData().size() - (bytes - ent.CommandData().data());
     request->value.append(bytes, remaining_size);
   } else {
     // construct the header and key
@@ -69,16 +66,14 @@ void RaftEntryToRequest(const raft::LogEntry &ent, Request *request,
     *reinterpret_cast<int *>(tmp_data + 4) = m;
     *reinterpret_cast<int *>(tmp_data + 8) = static_cast<int>(server_id);
 
-    LOG(raft::util::kRaft, "RaftEnt To Request: k=%d,m=%d,frag_id=%d", k, m,
-        server_id);
+    LOG(raft::util::kRaft, "RaftEnt To Request: k=%d,m=%d,frag_id=%d", k, m, server_id);
 
     for (int i = 0; i < 12; ++i) {
       request->value.push_back(tmp_data[i]);
     }
 
     // Append the value contents
-    request->value.append(ent.FragmentSlice().data(),
-                          ent.FragmentSlice().size());
+    request->value.append(ent.FragmentSlice().data(), ent.FragmentSlice().size());
   }
 }
 
@@ -87,8 +82,7 @@ void RaftEntryToRequest(const raft::LogEntry &ent, Request *request) {
     auto bytes = ent.CommandData().data();
     std::memcpy(request, bytes, RequestHdrSize());
 
-    bytes =
-        GetKeyFromPrefixLengthFormat(bytes + RequestHdrSize(), &(request->key));
+    bytes = GetKeyFromPrefixLengthFormat(bytes + RequestHdrSize(), &(request->key));
 
     char tmp_data[12];
     *reinterpret_cast<int *>(tmp_data) = 1;
@@ -102,8 +96,7 @@ void RaftEntryToRequest(const raft::LogEntry &ent, Request *request) {
     LOG(raft::util::kRaft, "RaftEnt To Request: k=%d,m=%d,frag_id=%d", 1, 0, 0);
 
     // value would be the prefix length key format
-    auto remaining_size =
-        ent.CommandData().size() - (bytes - ent.CommandData().data());
+    auto remaining_size = ent.CommandData().size() - (bytes - ent.CommandData().data());
     request->value.append(bytes, remaining_size);
   } else {
     // construct the header and key
@@ -118,7 +111,8 @@ void RaftEntryToRequest(const raft::LogEntry &ent, Request *request) {
     char tmp_data[12];
     // *reinterpret_cast<int *>(tmp_data) = ent.GetVersion().GetK();
     // *reinterpret_cast<int *>(tmp_data + 4) = ent.GetVersion().GetM();
-    // *reinterpret_cast<int *>(tmp_data + 8) = ent.GetVersion().GetFragmentId();
+    // *reinterpret_cast<int *>(tmp_data + 8) =
+    // ent.GetVersion().GetFragmentId();
     //
     // LOG(raft::util::kRaft, "RaftEnt To Request: k=%d,m=%d,frag_id=%d",
     //     ent.GetVersion().GetK(), ent.GetVersion().GetM(),
@@ -129,9 +123,8 @@ void RaftEntryToRequest(const raft::LogEntry &ent, Request *request) {
     }
 
     // Append the value contents
-    request->value.append(ent.FragmentSlice().data(),
-                          ent.FragmentSlice().size());
+    request->value.append(ent.FragmentSlice().data(), ent.FragmentSlice().size());
   }
 }
 
-} // namespace kv
+}  // namespace kv
