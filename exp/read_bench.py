@@ -12,14 +12,19 @@ class Results:
         self.repeated_read = repeated_read
 
 def parse_result(r:str) -> Results:
-    return Results(0, 0, 0)
+    avg_lat = re.findall(r"Average Latency = (\d+) us", r)[0]
+    fast_lat = re.findall(r"Recover Read Latency = (\d+) us", r)[0]
+    recover_lat = re.findall(r"Fast Read Latency = (\d+) us", r)[0]
+
+    return Results(fast_lat, recover_lat, avg_lat)
 
 def run_bench(N:int, f:int, value_size:str, write_count:int, repeated:int):
-    print("\nRun benchmark: N={} f={} value_size={} write_count={} repeated={}".format(N, f, value_size, write_count, repeated))
+    print("\nRun readbench: N={} f={} value_size={} write_count={} repeated={}".format(
+        N, f, value_size, write_count, repeated))
     cfg_file = "cluster_{}.conf".format(N)
     servers = util.ParseClusterConfiguration(cfg_file, "-i ~/.ssh/FlexibleK_Experiment.pem")
 
-    # Kick out some servers
+    # Kick out some servers randomly
     for i in range(f):
         servers.pop(randrange(len(servers)))
 
@@ -75,5 +80,5 @@ if __name__ == "__main__":
 
     # output the results
     for i in range(len(failures)):
-        print("[Failure: {}->{}][Fast Read Latency: {} ms][Recover Read Latency: {} ms][Repeated Read Latency: {} ms]".format(
+        print("[Failure: {}->{}][Fast Read Latency: {} us][Recover Read Latency: {} us][Repeated Read Latency: {} us]".format(
             failures[i], failuires[i] + 1, results[i].fast_read, results[i].recover_read, results[i].repeated_read))

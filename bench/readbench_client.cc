@@ -106,9 +106,10 @@ void ExecuteBench(kv::KvServiceClient *client, const std::vector<KvPair> &bench)
 
   std::this_thread::sleep_for(std::chrono::seconds(3));
 
-  // Abort the old leader
+  // Abort the leader
   auto stat = client->Abort();
 
+  // Wait for the cluster to achieve new consensus
   std::this_thread::sleep_for(std::chrono::seconds(3));
 
   int succ_cnt = 0;
@@ -134,9 +135,9 @@ void ExecuteBench(kv::KvServiceClient *client, const std::vector<KvPair> &bench)
         fast_op_stats.push_back(OperationStat{(uint64_t)dura, 0, 0});
       }
 
-      if (succ_cnt > 0 && succ_cnt % kVerboseInterval == 0) {
-        std::cout << "\r[Already Execute " << succ_cnt << " Ops]" << std::flush;
-      }
+      // if (succ_cnt > 0 && succ_cnt % kVerboseInterval == 0) {
+      //   std::cout << "\r[Already Execute " << succ_cnt << " Ops]" << std::flush;
+      // }
     }
   }
   printf("[Get Results][Succ Count=%d]\n", succ_cnt);
@@ -145,14 +146,14 @@ void ExecuteBench(kv::KvServiceClient *client, const std::vector<KvPair> &bench)
   auto [recover_read_latency, recover_commit, recover_apply] = Analysis(recover_op_stats);
   auto [fast_read_latency, fast_commit, fast_apply] = Analysis(fast_op_stats);
 
-  printf("[Results][Succ Get Cnt=%lu][Average Latency = %llu us]", op_stats.size(), avg_latency);
+  printf("[Results][Succ Get Cnt=%lu][Average Latency = %llu us]\n", op_stats.size(), avg_latency);
 
   printf(
       "[Recover Read Results][Succ Get Cnt=%lu][Recover Read Latency = %llu "
-      "us]",
+      "us]\n",
       op_stats.size(), recover_read_latency);
 
-  printf("[Fast Read Results][Succ Get Cnt=%lu][Fast Read Latency = %llu us]", op_stats.size(),
+  printf("[Fast Read Results][Succ Get Cnt=%lu][Fast Read Latency = %llu us]\n", op_stats.size(),
          fast_read_latency);
 
   // Dump the results to file
