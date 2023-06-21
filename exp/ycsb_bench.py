@@ -34,7 +34,7 @@ def run_bench(N:int, f:int, bench_type:str, values:str, op_count:int):
             print("[Bootstrap Server{} failed]".format(server.id))
             exit(1)
 
-    print("[BootStrap all Raft servers successfull...]")
+    print("[BootStrap all Raft servers successfully...]")
 
     time.sleep(1)
 
@@ -49,7 +49,6 @@ def run_bench(N:int, f:int, bench_type:str, values:str, op_count:int):
     if pr.returncode != 0:
         print("Execute client failed")
     else:
-        print(str(pr.stdout))
         result = parse_result(str(pr.stdout))
 
     for server in servers:
@@ -77,4 +76,4 @@ if __name__ == "__main__":
 
     # output the results
     for i in range(len(bench_types)):
-        print("[Bench: {}][Throughput: {} Mbps]".format(bench_types[i], results[i].bw))
+        print("[Bench: {}][Throughput: {:.2f} Mbps]".format(bench_types[i], results[i].bw))

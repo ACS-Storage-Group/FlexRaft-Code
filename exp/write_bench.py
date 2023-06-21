@@ -42,7 +42,7 @@ def run_bench(N:int, f:int, values:str, write_count:int):
             print("[Bootstrap Server{} failed]".format(server.id))
             exit(1)
 
-    print("[BootStrap all Raft servers successfull...]")
+    print("[BootStrap all Raft servers successfully...]")
 
     time.sleep(1)
 
