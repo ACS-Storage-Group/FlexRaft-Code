@@ -157,6 +157,7 @@ void ExecuteBench(kv::KvServiceClient *client, const std::vector<KvPair> &bench)
 }
 
 int main(int argc, char *argv[]) {
+  gflags::ParseCommandLineFlags(&argc, &argv, true);
   auto cluster_cfg = ParseConfigurationFile(FLAGS_conf);
   int client_id = FLAGS_id;
 

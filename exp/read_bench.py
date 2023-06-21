@@ -66,12 +66,12 @@ if __name__ == "__main__":
 
     # bootstrap current server as a client
     failures = [0, 1]
+    write_count = 1000;
     values = "2048K"
-    write_count = 5000;
     results = []
 
     for i in range(len(failures)):
-        results.append(run_bench(N, f, failures[i], write_count, repeated_read))
+        results.append(run_bench(N, failures[i], values, write_count, repeated_read))
 
     # output the results
     for i in range(len(failures)):
