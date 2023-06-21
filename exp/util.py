@@ -15,7 +15,6 @@ class Server:
         ssh_cmd = "ssh {} {}@{}".format(self.ssh_token, self.uname, self.ip) + " \"" + cmd + "\""
         pr = subprocess.run(ssh_cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, shell=True)
         if pr.returncode != 0:
-            print("[Server({}) execute command {} failed, please retry]".format(self.id, cmd))
             return pr.returncode
         return 0
 
