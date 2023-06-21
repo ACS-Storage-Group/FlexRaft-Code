@@ -9,9 +9,9 @@ This repository contains the implementation of our *ICPP'23* paper: **Minimizing
 * **Building System:** *cmake* version >= 3.8
 
 * **Compiler:** *g++* version >= 10.2.1
-* **Supported Platform:**  Our code is tested on Ubuntu20.04 and CentOS7. Operating systems of these platforms or of higher versions are supposed to support FlexRaft. 
+* **Supported Platform:**  Our code is tested on Ubuntu20.04 and CentOS-7. Operating systems of these platforms or of higher versions are supposed to support FlexRaft. 
 
-**NOTE:** The above prerequisites can be satisfied by using devtoolset-10 on CentOS7. 
+**NOTE:** The above prerequisites can be satisfied by using devtoolset-10 on CentOS-7. 
 
 ### Dependencies
 
@@ -33,7 +33,7 @@ CMAKE=cmake make build
 
 ## Running FlexRaft examples
 
-The FlexRaft codebase provides codes as examples and benchmarking tools in the ``bench`` directory, after building the codebase, execute the following steps to start the raft cluster servers and a client. 
+The FlexRaft codebase provides codes as examples and benchmarking tools in the ``bench`` directory, after building the codebase, execute the following steps to start the raft cluster servers and a client.
 
 * **Prepare the cluster configuration** file in the following format:
 
@@ -41,7 +41,7 @@ The FlexRaft codebase provides codes as examples and benchmarking tools in the `
   <node id> <ip:raft_port> <ip:kv_port> <log> <db>
   ```
 
-  * **node id** (ingeter): The identifier of a raft server. 
+  * **node id** an integer identifier of a raft server. 
   *  **ip:port**: The ip address of a raft server and associated ports for raft communication and KV service communication. 
   * **log**: The path to the location of the raft log.
   * **db**: The RocksDB path used as a state machine.
@@ -80,7 +80,7 @@ The FlexRaft codebase provides codes as examples and benchmarking tools in the `
   ```
 
   * ``--conf``: specify the path to the configuration file. 
-  * ``--id``: The identifier of this client, this parameter is useless and can be omitted. 
+  * ``--id``: The identifier of this client, this parameter is useless and can be ignored. 
   * ``--size``: specify the size of each key-value pair. The format is like "4K", "2M".
   * ``--write_num``: specify the number of *Put* requests to send.
 
@@ -95,5 +95,12 @@ The FlexRaft codebase provides codes as examples and benchmarking tools in the `
 
   ```bash
   # example client execution results
-  [Results][Succ Cnt=1000][Average Latency = 60431 us][Average Commit Latency = 36181 us][Average Apply Latency = 3473]
+  [Results][Succ Cnt=10000][Average Latency = 60431 us][Average Commit Latency = 36181 us][Average Apply Latency = 3473]
   ```
+
+---
+
+## Reproduce 
+
+To reproduce the main results in our *ICPP'23* paper, please refer to [exp/README.md](./exp/README.md)
+

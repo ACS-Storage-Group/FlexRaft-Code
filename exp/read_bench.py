@@ -1,6 +1,6 @@
 import util
 import sys
-import time
+import time 
 import subprocess
 import re
 from random import randrange
@@ -13,8 +13,8 @@ class Results:
 
 def parse_result(r:str) -> Results:
     avg_lat = re.findall(r"Average Latency = (\d+) us", r)[0]
-    fast_lat = re.findall(r"Recover Read Latency = (\d+) us", r)[0]
-    recover_lat = re.findall(r"Fast Read Latency = (\d+) us", r)[0]
+    recover_lat = re.findall(r"Recover Read Latency = (\d+) us", r)[0]
+    fast_lat = re.findall(r"Fast Read Latency = (\d+) us", r)[0]
 
     return Results(fast_lat, recover_lat, avg_lat)
 
@@ -67,6 +67,7 @@ if __name__ == "__main__":
         exit(1)
     N = int(sys.argv[1])
     repeated_read = 10
+    F = (N - 1) // 2;
 
     # bootstrap current server as a client
     failures = [0, 1]
@@ -79,5 +80,7 @@ if __name__ == "__main__":
 
     # output the results
     for i in range(len(failures)):
-        print("[Failure: {}->{}][Fast Read Latency: {} us][Recover Read Latency: {} us][Repeated Read Latency: {} us]".format(
-            failures[i], failures[i] + 1, results[i].fast_read, results[i].recover_read, results[i].repeated_read))
+        k = N - failures[i] - F
+        m = N - k
+        print("[({}, {})][Raft: {} us][FlexRaft(1): {} us][FlexRaft(10) Latency: {} us]".format(
+            k, m, results[i].fast_read, results[i].recover_read, results[i].repeated_read))
