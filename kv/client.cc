@@ -49,9 +49,8 @@ Response KvServiceClient::WaitUntilRequestDone(const Request &request) {
         curr_leader_ = kNoDetectLeader;
         curr_leader_term_ = 0;
         break;
-
-      default:
-        assert(false);
+        // default:
+        // assert(false);
     }
   }
   // Timeout
