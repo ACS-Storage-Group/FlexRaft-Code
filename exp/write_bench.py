@@ -73,7 +73,7 @@ if __name__ == "__main__":
 
     # bootstrap current server as a client
     values = ["4K", "16K", "64K", "128K", "256K", "512K", "1024K", "2048K"]
-    write_count = [1000] * len(values)
+    write_count = [5000] * len(values)
 
     results = []
 

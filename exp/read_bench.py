@@ -54,7 +54,6 @@ def run_bench(N:int, f:int, value_size:str, write_count:int, repeated:int):
     if pr.returncode != 0:
         print("Execute client failed")
     else:
-        print(str(pr.stdout))
         result = parse_result(str(pr.stdout))
 
     for server in servers:
@@ -81,4 +80,4 @@ if __name__ == "__main__":
     # output the results
     for i in range(len(failures)):
         print("[Failure: {}->{}][Fast Read Latency: {} us][Recover Read Latency: {} us][Repeated Read Latency: {} us]".format(
-            failures[i], failuires[i] + 1, results[i].fast_read, results[i].recover_read, results[i].repeated_read))
+            failures[i], failures[i] + 1, results[i].fast_read, results[i].recover_read, results[i].repeated_read))
