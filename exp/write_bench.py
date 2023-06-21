@@ -79,6 +79,8 @@ if __name__ == "__main__":
 
     for i in range(len(values)):
         results.append(run_bench(N, f, values[i], write_count[i]))
+        # Sleep 5 seconds between each benchmark
+        time.sleep(5)
 
     # output the results
     for i in range(len(values)):

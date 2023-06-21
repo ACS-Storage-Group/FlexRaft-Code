@@ -52,6 +52,11 @@ Response KvServiceClient::WaitUntilRequestDone(const Request &request) {
         // default:
         // assert(false);
     }
+
+    // The abort command only executes once
+    if (request.type == kAbort) {
+      return resp;
+    }
   }
   // Timeout
   Response resp;
