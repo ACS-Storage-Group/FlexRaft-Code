@@ -11,7 +11,8 @@ class Results:
         self.bw = bw
 
 def parse_result(r:str) -> Results:
-    return Results(0)
+    thpt = re.findall(r'Throughput: (\d+\.\d+)', r)
+    return Results(sum([float(a) for a in thpt]))
 
 def run_bench(N:int, f:int, bench_type:str, values:str, op_count:int):
     print("\nRun benchmark: N={} f={} type = {} values={} op_count={}".format(N, f, bench_type, values, op_count))
@@ -75,5 +76,5 @@ if __name__ == "__main__":
         results.append(run_bench(N, f, bench_types[i], value_size, op_count))
 
     # output the results
-    for i in range(len(values)):
-        print("[Value Size: {}][Write Latency: {} us]".format(values[i], results[i].write_latency))
+    for i in range(len(bench_types)):
+        print("[Bench: {}][Throughput: {} Mbps]".format(bench_types[i], results[i].bw))
