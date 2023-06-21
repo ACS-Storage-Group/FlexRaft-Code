@@ -65,7 +65,7 @@ if __name__ == "__main__":
     f = int(sys.argv[2])
 
     # bootstrap current server as a client
-    value_size = "4K"
+    value_size = "2048K"
     op_count  = 5000
     bench_types = ["YCSB_A", "YCSB_B", "YCSB_C", "YCSB_D", "YCSB_F"]
 
