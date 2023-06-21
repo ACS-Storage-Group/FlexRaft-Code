@@ -6,24 +6,15 @@ import re
 from random import randrange
 
 class Results:
-    def __init__(self, write_latency, commit_latency, apply_latency):
-        self.write_latency = write_latency
-        self.commit_latency = commit_latency
-        self.apply_latency = apply_latency
+    def __init__(self, bw):
+        # bw in Mbps
+        self.bw = bw
 
 def parse_result(r:str) -> Results:
-    write_lat_pattern = r"Average Latency = (\d+) us"
-    commit_lat_pattern = r"Average Commit Latency = (\d+) us"
-    apply_lat_pattern = r"Average Apply Latency = (\d+) us"
+    return Results(0, 0, 0)
 
-    write_lat = re.findall(write_lat_pattern, r)[0]
-    commit_lat = re.findall(commit_lat_pattern, r)[0]
-    apply_lat = re.findall(apply_lat_pattern, r)[0]
-
-    return Results(write_lat, commit_lat, apply_lat)
-
-def run_bench(N:int, f:int, values:str, write_count:int):
-    print("\nRun benchmark: N={} f={} values={} write_count={}".format(N, f, values, write_count))
+def run_bench(N:int, f:int, bench_type:str, values:str, op_count:int):
+    print("\nRun benchmark: N={} f={} type = {} values={} write_count={}".format(N, f, bench_type, values, write_count))
     cfg_file = "cluster_{}.conf".format(N)
     servers = util.ParseClusterConfiguration(cfg_file, "-i ~/.ssh/FlexibleK_Experiment.pem")
 
@@ -32,7 +23,7 @@ def run_bench(N:int, f:int, values:str, write_count:int):
         servers.pop(randrange(len(servers)))
 
     # bootstrap these raft servers
-    bin = "/root/FlexRaft-Code/build/bench/bench_server"
+    bin = "/root/FlexRaft-Code/build/bench/ycsb_server"
     cfg = "/root/FlexRaft-Code/exp/{}".format(cfg_file)
 
     # bootstrap servers
@@ -47,16 +38,17 @@ def run_bench(N:int, f:int, values:str, write_count:int):
     time.sleep(1)
 
     # bootstrap the client
-    client_bin = "/root/FlexRaft-Code/build/bench/bench_client"
+    client_bin = "/root/FlexRaft-Code/build/bench/ycsb_client"
     client_cfg = "/root/FlexRaft-Code/exp/{}".format(cfg_file)
 
-    client_cmd = "{} --conf={} --id=0 --size={} --write_num={}".format(
-        client_bin, client_cfg, values, write_count)
+    client_cmd = "{} --conf={} --client_num=4 --size={} --op_count={} --type={}".format(
+        client_bin, client_cfg, values, op_count, bench_type)
     pr = subprocess.run(client_cmd, stdout=subprocess.PIPE, shell=True)
     result = Results(0, 0, 0)
     if pr.returncode != 0:
         print("Execute client failed")
     else:
+        print(str(pr.stdout))
         result = parse_result(str(pr.stdout))
 
     for server in servers:
@@ -68,17 +60,19 @@ if __name__ == "__main__":
     if len(sys.argv) < 3:
         print("Require at least three arguments")
         exit(1)
+
     N = int(sys.argv[1])
     f = int(sys.argv[2])
 
     # bootstrap current server as a client
-    values = ["4K", "16K", "64K", "128K", "256K", "512K", "1024K", "2048K"]
-    write_count = [1000] * len(values)
+    value_size = "4K"
+    op_count  = 5000
+    bench_types = ["YCSB_A", "YCSB_B", "YCSB_C", "YCSB_D", "YCSB_F"]
 
     results = []
 
-    for i in range(len(values)):
-        results.append(run_bench(N, f, values[i], write_count[i]))
+    for bench_type in range(len(bench_types)):
+        results.append(run_bench(N, f, bench_type, value_size, op_count))
 
     # output the results
     for i in range(len(values)):

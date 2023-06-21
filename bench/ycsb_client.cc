@@ -217,11 +217,6 @@ void ExecuteBench(kv::KvServiceClient *client, int client_id, int interval,
   printf("\n[Client %d] Throughput: %.2lf Mbps\n", client_id, thpt);
 }
 
-// Arg1: file name of the configuration file
-// Arg2: Number of clients
-// Arg3: Value size
-// Arg4: operation count
-// Arg5: YCSB operation Type
 int main(int argc, char *argv[]) {
   gflags::ParseCommandLineFlags(&argc, &argv, true);
   auto cluster_cfg = ParseConfigurationFile(FLAGS_conf);
