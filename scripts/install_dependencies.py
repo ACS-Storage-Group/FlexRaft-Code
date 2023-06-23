@@ -13,7 +13,7 @@ os.chdir(root_path)
 
 def install_rocksdb():
     if not os.path.exists("rocksdb"):
-        subprocess.run("git clone git@github.com:facebook/rocksdb.git", shell=True)
+        subprocess.run("git clone https://github.com/facebook/rocksdb.git", shell=True)
     os.chdir("rocksdb")
     subprocess.run("git checkout v7.4.5", shell=True)
     subprocess.run("make static_lib -j 8", shell=True)
@@ -22,7 +22,7 @@ def install_rocksdb():
 
 def install_gtest():
     if not os.path.exists("googletest"):
-        subprocess.run("git clone git@github.com:google/googletest.git", shell=True)
+        subprocess.run("git clone https://github.com/google/googletest.git", shell=True)
     os.chdir("googletest")
     subprocess.run("cmake -B build", shell=True)
     subprocess.run("cmake --build build", shell=True)
@@ -74,7 +74,7 @@ def install_nasm_assembler():
 
 def install_libisal():
     subprocess.run("rm -rf isa-l", shell=True)
-    subprocess.run("git clone git@github.com:intel/isa-l.git", shell=True)
+    subprocess.run("git clone https://github.com/intel/isa-l.git", shell=True)
     os.chdir("isa-l")
     subprocess.run("./autogen.sh", shell=True)
     subprocess.run("./configure", shell=True)
