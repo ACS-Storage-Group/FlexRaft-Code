@@ -24,8 +24,8 @@ def install_gtest():
     if not os.path.exists("googletest"):
         subprocess.run("git clone https://github.com/google/googletest.git", shell=True)
     os.chdir("googletest")
-    subprocess.run("cmake -B build", shell=True)
-    subprocess.run("cmake --build build", shell=True)
+    subprocess.run("cmake3 -B build", shell=True)
+    subprocess.run("cmake3 --build build", shell=True)
     os.chdir("build")
     subprocess.run("sudo make install", shell=True)
     os.chdir(root_path)
