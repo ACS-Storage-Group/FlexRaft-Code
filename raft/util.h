@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <fstream>
 #include <string>
+#include <vector>
 
 namespace raft {
 namespace util {
@@ -194,6 +195,23 @@ inline TimePoint NowTime() { return std::chrono::high_resolution_clock::now(); }
 
 inline int64_t DurationToMicros(TimePoint start, TimePoint end) {
   return std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+}
+
+// ---- Related utility functions for code conversion: ------
+//
+// Calculate the greatest common divisor of two integers
+inline int gcd(int a, int b) { return a % b == 0 ? b : gcd(b, a % b); }
+
+// Calculate the least common multiplier
+inline int lcm(int a, int b) { return (a * b) / gcd(a, b); }
+
+// Calculate the least common multiplier for multiple integers
+inline int lcm(const std::vector<int> &v) {
+  int ret = v[0];
+  for (const auto &e : v) {
+    ret = lcm(ret, e);
+  }
+  return ret;
 }
 
 // Use singleton to access the global-only logger
