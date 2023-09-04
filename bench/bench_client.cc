@@ -46,8 +46,9 @@ struct OperationStat {
   std::string ToString() const {
     char buf[512];
     sprintf(buf,
-            "[OpLatency = %llu us][CommitLatency = %llu us][ApplyLatency = "
-            "%llu us]",
+            "[OpLatency = %" PRIu64 " us][CommitLatency = %" PRIu64
+            " us][ApplyLatency = "
+            "%" PRIu64 " us]",
             op_latency, commit_latency, apply_latency);
     return std::string(buf);
   }
@@ -110,11 +111,11 @@ void ExecuteBench(kv::KvServiceClient *client, const std::vector<KvPair> &bench)
   auto [avg_latency, avg_commit_latency, avg_apply_latency] = Analysis(op_stats);
 
   printf("[Client Id %d]\n", client->ClientId());
-  printf(
-      "[Results][Succ Cnt=%lu][Average Latency = %llu us][Average Commit "
-      "Latency = "
-      "%llu us][Average Apply Latency = %llu us]\n",
-      op_stats.size(), avg_latency, avg_commit_latency, avg_apply_latency);
+  printf("[Results][Succ Cnt=%" PRIu64 "][Average Latency = %" PRIu64
+         " us][Average Commit "
+         "Latency = "
+         "%" PRIu64 " us][Average Apply Latency = %" PRIu64 " us]\n",
+         op_stats.size(), avg_latency, avg_commit_latency, avg_apply_latency);
   fflush(stdout);
 
   int succ_cnt = 0;

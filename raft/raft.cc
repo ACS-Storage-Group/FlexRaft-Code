@@ -419,7 +419,7 @@ ProposeResult RaftState::Propose(const CommandData &command) {
 
   // [PERF]
   // Record the start time of commiting an entry
-  commit_start_time_[entry.Index()] = std::chrono::high_resolution_clock::now();
+  commit_start_time_[entry.Index()] = util::NowTime();
 
   LOG(util::kRaft, "S%d Propose at (I%d T%d) (ptr=%p)", id_, next_entry_index, CurrentTerm(),
       entry.CommandData().data());

@@ -50,7 +50,7 @@ RCF::ByteBuffer RaftRPCService::AppendEntries(const RCF::ByteBuffer &arg_buf) {
     raft_->Process(&args, &reply);
     // auto end = util::NowTime();
     // auto dura = util::DurationToMicros(start, end);
-    // printf("Process Time: %llu\n", dura);
+    // printf("Process Time: %" PRIu64"\n", dura);
   } else {
     reply.chunk_infos.reserve(args.entry_cnt);
     for (int i = 0; i < args.entry_cnt; ++i) {

@@ -83,9 +83,9 @@ struct OperationStat {
   std::string ToString() const {
     char buf[512];
     sprintf(buf,
-            "[Type = %s][OpLatency = %llu us][CommitLatency = %llu "
+            "[Type = %s][OpLatency = %" PRIu64" us][CommitLatency = %" PRIu64" "
             "us][ApplyLatency = "
-            "%llu us]",
+            "%" PRIu64" us]",
             YCSBTypeToString(type), op_latency, commit_latency, apply_latency);
     return std::string(buf);
   }

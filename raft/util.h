@@ -1,6 +1,9 @@
 #pragma once
 #include <sys/select.h>
 
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
+
 #include <chrono>
 #include <cstdio>
 #include <fstream>
@@ -99,7 +102,7 @@ struct AppendEntriesRPCPerfCounter final : public PerfCounter {
 
   std::string ToString() const override {
     char buf[512];
-    sprintf(buf, "[AppendEntriesPerfRPCCounter: transfer_size(%llu) time(%llu us)]",
+    sprintf(buf, "[AppendEntriesPerfRPCCounter: transfer_size(%" PRIu64") time(%" PRIu64" us)]",
             this->transfer_size, this->pass_time);
     return std::string(buf);
   }
@@ -121,7 +124,7 @@ struct PersistencePerfCounter final : public PerfCounter {
 
   std::string ToString() const override {
     char buf[512];
-    sprintf(buf, "[PersistencePerfCounter: persist_size(%llu) time(%llu us)]", this->persist_size,
+    sprintf(buf, "[PersistencePerfCounter: persist_size(%" PRIu64") time(%" PRIu64" us)]", this->persist_size,
             this->pass_time);
     return std::string(buf);
   }
@@ -143,8 +146,8 @@ struct RaftAppendEntriesProcessPerfCounter final : public PerfCounter {
   std::string ToString() const override {
     char buf[512];
     sprintf(buf,
-            "[RaftAppendEntriesProcessPerfCounter: process_size(%llu) "
-            "time(%llu us)]",
+            "[RaftAppendEntriesProcessPerfCounter: process_size(%" PRIu64") "
+            "time(%" PRIu64" us)]",
             this->process_size, this->pass_time);
     return std::string(buf);
   }
@@ -168,7 +171,7 @@ struct EncodingEntryPerfCounter final : public PerfCounter {
     char buf[512];
     sprintf(buf,
             "[EncodingEntryPerfCounter]: encoding_parameters(k=%d m=%d) "
-            "time(%llu us)]",
+            "time(%" PRIu64" us)]",
             this->encoding_k, this->encoding_m, this->pass_time);
     return std::string(buf);
   }

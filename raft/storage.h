@@ -10,6 +10,7 @@
 #include "log_entry.h"
 #include "raft_type.h"
 #include "serializer.h"
+#include "util.h"
 
 namespace raft {
 

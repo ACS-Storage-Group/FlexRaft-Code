@@ -270,9 +270,9 @@ TEST_F(StorageTest, TestPersistencePerformance) {
   uint64_t latency_sum = 0;
   std::for_each(latency.begin(), latency.end(),
                 [&latency_sum](uint64_t n) { latency_sum += n; });
-  printf("[Average Persistence Latency = %llu us]\n",
+  printf("[Average Persistence Latency = %" PRIu64" us]\n",
          latency_sum / latency.size());
-  printf("[Max     Persistence Latency = %llu us]\n",
+  printf("[Max     Persistence Latency = %" PRIu64" us]\n",
          *std::max_element(latency.begin(), latency.end()));
   std::sort(latency.begin(), latency.end());
   std::reverse(latency.begin(), latency.end());
@@ -280,7 +280,7 @@ TEST_F(StorageTest, TestPersistencePerformance) {
   int top_cnt = latency.size() / 10;
   std::for_each(latency.begin(), latency.begin() + top_cnt,
                 [&top_latency_sum](uint64_t n) { top_latency_sum += n; });
-  printf("[Top10 average Latency = %llu us]\n", top_latency_sum / top_cnt);
+  printf("[Top10 average Latency = %" PRIu64" us]\n", top_latency_sum / top_cnt);
 
   delete storage;
   Clear();
@@ -307,9 +307,9 @@ TEST_F(StorageTest, DISABLED_TestPersistRaftStatePerformance) {
   uint64_t latency_sum = 0;
   std::for_each(latency.begin(), latency.end(),
                 [&latency_sum](uint64_t n) { latency_sum += n; });
-  printf("[Average Persistence Latency = %llu us]\n",
+  printf("[Average Persistence Latency = %" PRIu64" us]\n",
          latency_sum / latency.size());
-  printf("[Max     Persistence Latency = %llu us]\n",
+  printf("[Max     Persistence Latency = %" PRIu64" us]\n",
          *std::max_element(latency.begin(), latency.end()));
   std::sort(latency.begin(), latency.end());
   std::reverse(latency.begin(), latency.end());
@@ -317,7 +317,7 @@ TEST_F(StorageTest, DISABLED_TestPersistRaftStatePerformance) {
   int top_cnt = latency.size() / 10;
   std::for_each(latency.begin(), latency.begin() + top_cnt,
                 [&top_latency_sum](uint64_t n) { top_latency_sum += n; });
-  printf("[Top10 average Latency = %llu us]\n", top_latency_sum / top_cnt);
+  printf("[Top10 average Latency = %" PRIu64" us]\n", top_latency_sum / top_cnt);
 
   Clear();
 }

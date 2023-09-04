@@ -1,6 +1,7 @@
 #include "encoder.h"
 
 #include "isa-l/erasure_code.h"
+#include "log_entry.h"
 #include "raft_type.h"
 
 namespace raft {
@@ -49,6 +50,35 @@ bool Encoder::EncodeSlice(const Slice &slice, int k, int m, EncodingResults *res
       results->insert({i, Slice(reinterpret_cast<char *>(encode_output_[i - k]), fragment_size)});
     }
   }
+  return true;
+}
+
+// Given a few slices, use EC coding to generate a few paraties:
+bool Encoder::EncodeSlice(const std::vector<Slice> &slices, int k, int m, std::vector<Slice> &res) {
+  auto s = slices.at(0);
+  auto fragment_sz = s.size();
+  // Fast path:
+  if (k == 1) {
+    for (int i = 0; i < k + m; ++i) {
+      res.push_back(s);
+    }
+    return true;
+  }
+
+  for (int i = 0; i < k; ++i) encode_input_[i] = (unsigned char *)(slices[i].data());
+  for (int i = 0; i < m; ++i) {
+    encode_output_[i] = new unsigned char[fragment_sz];
+    res.push_back(Slice((char *)(encode_output_[i]), fragment_sz));
+  }
+
+  // start encoding process
+  auto t = m + k;
+  auto g_tbls = new unsigned char[k * m * 32];
+
+  gf_gen_cauchy1_matrix(encode_matrix_, t, k);
+  ec_init_tables(k, m, &encode_matrix_[k * k], g_tbls);
+  ec_encode_data(fragment_sz, k, m, g_tbls, encode_input_, encode_output_);
+
   return true;
 }
 

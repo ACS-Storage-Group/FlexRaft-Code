@@ -46,8 +46,8 @@ struct RPCStats {
   std::string ToString() const {
     char buf[512];
     sprintf(buf,
-            "[Total Time = %llu us][Process Time = %llu us][Transfer Time = "
-            "%llu us][Args "
+            "[Total Time = %ldus][Process Time = %ldus][Transfer Time = "
+            "%ldus][Args "
             "size=%luB][Reply size=%luB]",
             total_time, process_time, total_time - process_time, arg_size, resp_size);
     return std::string(buf);

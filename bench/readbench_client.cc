@@ -50,8 +50,8 @@ struct OperationStat {
   std::string ToString() const {
     char buf[512];
     sprintf(buf,
-            "[OpLatency = %llu us][CommitLatency = %llu us][ApplyLatency = "
-            "%llu us]",
+            "[OpLatency = %" PRIu64" us][CommitLatency = %" PRIu64" us][ApplyLatency = "
+            "%" PRIu64" us]",
             op_latency, commit_latency, apply_latency);
     return std::string(buf);
   }
@@ -146,14 +146,14 @@ void ExecuteBench(kv::KvServiceClient *client, const std::vector<KvPair> &bench)
   auto [recover_read_latency, recover_commit, recover_apply] = Analysis(recover_op_stats);
   auto [fast_read_latency, fast_commit, fast_apply] = Analysis(fast_op_stats);
 
-  printf("[Results][Succ Get Cnt=%lu][Average Latency = %llu us]\n", op_stats.size(), avg_latency);
+  printf("[Results][Succ Get Cnt=%" PRIu64"][Average Latency = %" PRIu64" us]\n", op_stats.size(), avg_latency);
 
   printf(
-      "[Recover Read Results][Succ Get Cnt=%lu][Recover Read Latency = %llu "
+      "[Recover Read Results][Succ Get Cnt=%" PRIu64"][Recover Read Latency = %" PRIu64" "
       "us]\n",
       op_stats.size(), recover_read_latency);
 
-  printf("[Fast Read Results][Succ Get Cnt=%lu][Fast Read Latency = %llu us]\n", op_stats.size(),
+  printf("[Fast Read Results][Succ Get Cnt=%" PRIu64"][Fast Read Latency = %" PRIu64" us]\n", op_stats.size(),
          fast_read_latency);
 
   // Dump the results to file

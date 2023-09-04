@@ -7,6 +7,9 @@
 #include <algorithm>
 #include <chrono>
 
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
+
 using KvPair = std::pair<std::string, std::string>;
 
 struct BenchConfiguration {
@@ -44,7 +47,7 @@ void ExecuteBench(kv::StorageEngine* engine, const std::vector<KvPair>& bench) {
   auto avg_lantency = latency_sum / lantency.size();
   auto max_lantency = *std::max_element(lantency.begin(), lantency.end());
 
-  printf("[Results][Succ Cnt=%lu][Average Lantency = %llu us][Max Lantency = %llu us]\n",
+  printf("[Results][Succ Cnt=%lu][Average Lantency = %" PRIu64" us][Max Lantency = %" PRIu64" us]\n",
          lantency.size(), avg_lantency, max_lantency);
 
   int succ_cnt = 0;

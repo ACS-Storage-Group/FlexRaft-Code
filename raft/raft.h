@@ -97,6 +97,7 @@ struct LivenessMonitor {
         response[i] = false;
       }
     }
+    // "me" is always alive
     response[me] = true;
   }
 
@@ -121,6 +122,10 @@ struct LivenessMonitor {
   // }
 
   bool IsAlive(raft_node_id_t target_id) const { return response[target_id]; }
+
+  std::vector<bool> GetLivenessVector() const {
+    return std::vector<bool>(response, response + node_num);
+  }
 };
 
 struct SequenceGenerator {

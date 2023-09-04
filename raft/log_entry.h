@@ -47,6 +47,19 @@ class Slice {
     return size() > slice.size() ? 1 : -1;
   }
 
+  // Shard the slice into multiple equal-sized subslices:
+  // Note that it must be size_ % k = 0:
+  auto Shard(int k) const -> std::vector<Slice> {
+    auto sub_sz = size() / k;
+    std::vector<Slice> v;
+    auto d = data();
+    for (int i = 0; i < k; ++i) {
+      v.push_back(Slice(d, sub_sz));
+      d += sub_sz;
+    }
+    return v;
+  }
+
  private:
   char *data_ = nullptr;
   size_t size_ = 0;

@@ -27,11 +27,11 @@ endif()
 
 SET(LIBS ${libpthread} ${libdl} ${libuuid} ${libisal})
 
-set(
-  RAFT_SRC 
+set(RAFT_SRC 
   log_entry.cc 
   serializer.cc
   encoder.cc
+  code_conversion.cc
   util.cc
   log_manager.cc
   storage.cc

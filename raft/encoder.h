@@ -56,6 +56,9 @@ class Encoder {
   // parameters k and m is used to control this encoding process
   bool EncodeSlice(const Slice &slice, int k, int m, EncodingResults *results);
 
+  // Given a few slices, use EC coding to generate a few paraties: 
+  bool EncodeSlice(const std::vector<Slice>& slices, int k, int m, std::vector<Slice>& res);
+
   // Decode a set of fragments to generate the full content, the corresponding k
   // and m parameters should be set before calling this method
   bool DecodeSlice(const EncodingResults &input, int k, int m, Slice *results);
