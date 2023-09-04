@@ -6,7 +6,7 @@
 #include "raft_type.h"
 
 namespace raft {
-inline int get_chunk_count(int k, int m) {
+inline int get_chunk_count(int k) {
   // The result is lcm (1, 2,...,k-1) * k
   std::vector<int> v(k - 1);
   std::iota(v.begin(), v.end(), 1);
@@ -57,7 +57,10 @@ inline std::vector<std::vector<raft_chunk_index_t>> generate_placement(std::vect
     int distr_each_cnt = r / replenish_server_cnt;
     for (int j = 0; j < replenish_servers.size(); ++j) {
       auto s = replenish_servers[j];
-      ret[s]
+      int l = j * distr_each_cnt, r = (j + 1) * distr_each_cnt;
+      for (int k = l; k < r; ++k) {
+        ret[s].emplace_back(fail_servers[i], k);
+      }
     }
   }
 

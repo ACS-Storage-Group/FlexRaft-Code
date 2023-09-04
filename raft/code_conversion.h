@@ -17,7 +17,7 @@ using raft_chunk_index_t = std::pair<raft_node_id_t, uint32_t>;
 
 // Given the optimal encoding parameter, calculate the number of chunks
 // for code conversion
-int get_chunk_count(int k, int m);
+int get_chunk_count(int k);
 
 // N: the maximum number of server in current cluster
 // k, m: the optimal encoding parameter
