@@ -131,4 +131,39 @@ TEST_F(EncoderTest, TestEncodingDecodingLargeSlice) {
   ASSERT_EQ(origin_ent.compare(ent), 0);
 }
 
+TEST_F(EncoderTest, TestVectorInput) {
+  const int TestK = 9;
+  const int TestM = 9;
+
+  // Do the encoding
+  Encoder encoder;
+  Slice ent = GenerateRandomSlice(512 * 1024, 1024 * 1024);
+  // Align the size to be multipler of TestK
+  auto sz = ent.size() - ent.size() % TestK;
+  auto input = Slice(ent.data(), sz);
+
+  std::vector<Slice> output;
+  encoder.EncodeSlice(input.Shard(TestK), TestK, TestM, output);
+  ASSERT_EQ(output.size(), TestK + TestM);
+
+  // Randomly drop some elements
+  Encoder::EncodingResults res;
+  for (int i = 0; i < output.size(); ++i) {
+    res.emplace(i, output[i]);
+  }
+
+  // remove some fragments 
+  while (res.size() > TestK) {
+    auto remove_iter = std::next(std::begin(res), rand() % res.size());
+    res.erase(remove_iter);
+  }
+
+  // Decoding
+  Slice recover_ent;
+  auto b = encoder.DecodeSlice(res, TestK, TestM, &recover_ent);
+
+  ASSERT_TRUE(b);
+  ASSERT_EQ(recover_ent.compare(input), 0);
+}
+
 }  // namespace raft

@@ -1,6 +1,10 @@
 #pragma once
 #include <algorithm>
+#include <cstdint>
+#include <iomanip>
+#include <iterator>
 #include <numeric>
+#include <sstream>
 #include <unordered_map>
 
 #include "log_entry.h"
@@ -18,7 +22,33 @@ namespace raft {
 
 using raft_chunk_id_t = uint32_t;
 
-using raft_chunk_index_t = std::pair<raft_node_id_t, uint32_t>;
+// using raft_chunk_index_t = std::pair<raft_node_id_t, uint32_t>;
+typedef struct ChunkIndex {
+  static constexpr int16_t kInvalidNum = (int16_t)-1;
+
+  int16_t node_id = kInvalidNum;
+  int16_t chunk_id = kInvalidNum;
+
+  ChunkIndex(int16_t node_id, int16_t chunk_id) : node_id(node_id), chunk_id(chunk_id) {}
+
+  ChunkIndex(const ChunkIndex&) = default;
+  ChunkIndex& operator=(const ChunkIndex&) = default;
+
+  bool Valid() { return node_id != kInvalidNum && chunk_id != kInvalidNum; }
+
+  static ChunkIndex InvalidChunkIndex() { return ChunkIndex(kInvalidNum, kInvalidNum); }
+
+  std::string ToString() const {
+    std::stringstream ss;
+    ss << "(" << std::setw(3) << node_id << "," << std::setw(3) << chunk_id << ")";
+    return ss.str();
+  }
+
+  friend bool operator==(const ChunkIndex& left, const ChunkIndex& right) {
+    return left.chunk_id == right.chunk_id && left.node_id == right.node_id;
+  }
+
+} raft_chunk_index_t;
 
 namespace CODE_CONVERSION_NAMESPACE {
 // Given the optimal encoding parameter, calculate the number of chunks
@@ -32,17 +62,39 @@ raft_chunk_id_t convert_to_chunk_id(raft_chunk_index_t d, int r);
 
 class ChunkDistribution {
  public:
+  // A chunk may belong to different encoding group, for the original data,
+  // its second encoding group member is invalid.
+  struct Chunk {
+    raft_chunk_index_t idx1;
+    raft_chunk_index_t idx2;
+    Slice data;
+
+    Chunk(raft_chunk_index_t idx1, raft_chunk_index_t idx2, Slice d)
+        : idx1(idx1), idx2(idx2), data(d) {}
+
+    Chunk(const Chunk&) = default;
+    Chunk& operator=(const Chunk&) = default;
+
+    std::string ToString() const {
+      std::stringstream ss;
+      ss << "[" << idx1.ToString() << "," << idx2.ToString() << "]";
+      return ss.str();
+    }
+  };
+
   // A ChunkVector is a vector of chunks which should be stored within a single server
   struct ChunkVector {
-    std::vector<std::pair<raft_chunk_index_t, Slice>> chunks_;
+    std::vector<Chunk> chunks_;
 
     // Serialize this ChunkVector to a slice and return the data
     Slice Serialize();
 
-    // Deserialize from a slice
+    // Deserialize the ChunkVector from a slice
     bool Deserialize(const Slice& s);
 
-    void AddChunk(raft_chunk_index_t idx, Slice s) { chunks_.emplace_back(idx, s); }
+    void AddChunk(raft_chunk_index_t idx1, raft_chunk_index_t idx2, Slice s) {
+      chunks_.emplace_back(idx1, idx2, s);
+    }
 
     auto& as_vec() { return chunks_; }
   };
@@ -85,6 +137,9 @@ class ChunkDistribution {
   // Encode the slice according to the given placement
   void EncodeForPlacement(const Slice& slice);
 
+  // Decode input ChunkVectors to get the original data, write it into the resultant slice
+  bool Decode(std::unordered_map<raft_node_id_t, ChunkVector>& chunks, Slice* slice);
+
   void PrepareOriginalChunks(const Slice& slice);
 
   Slice org_chunk_at(raft_chunk_index_t idx) {
@@ -102,11 +157,19 @@ class ChunkDistribution {
     return ret;
   }
 
- private:
-  ChunkPlacement placement_;  // The placement of chunks
-  int F_, k_, r_;
-  std::vector<Slice> original_chunks_;
+  auto GetChunkVector(raft_node_id_t id) -> ChunkVector {
+    if (chunks_map_.count(id) != 0) {
+      return chunks_map_[id];
+    }
+    return ChunkVector{};
+  }
 
+ private:
+  int F_, k_, r_;
+
+  ChunkPlacement placement_;            // The placement of chunks
+  std::vector<Slice> original_chunks_;  // Original chunks sharded from the original data
+  // Calculate the ChunkVector for each server
   std::unordered_map<raft_node_id_t, ChunkVector> chunks_map_;
 };
 };  // namespace CODE_CONVERSION_NAMESPACE

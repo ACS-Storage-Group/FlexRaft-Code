@@ -65,7 +65,11 @@ bool Encoder::EncodeSlice(const std::vector<Slice> &slices, int k, int m, std::v
     return true;
   }
 
-  for (int i = 0; i < k; ++i) encode_input_[i] = (unsigned char *)(slices[i].data());
+  for (int i = 0; i < k; ++i) {
+    encode_input_[i] = (unsigned char *)(slices[i].data());
+    res.push_back(slices[i]);
+  }
+
   for (int i = 0; i < m; ++i) {
     encode_output_[i] = new unsigned char[fragment_sz];
     res.push_back(Slice((char *)(encode_output_[i]), fragment_sz));

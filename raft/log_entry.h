@@ -60,6 +60,18 @@ class Slice {
     return v;
   }
 
+  static auto Combine(const std::vector<Slice>& slices) -> Slice {
+    size_t alloc_sz = 0;
+    for (const auto& s : slices) alloc_sz += s.size();
+    auto alloc_data = new char[alloc_sz];
+    auto d = alloc_data;
+    for (const auto& s : slices) {
+      std::memcpy(d, s.data(), s.size());
+      d += s.size();
+    }
+    return Slice(alloc_data, alloc_sz);
+  }
+
  private:
   char *data_ = nullptr;
   size_t size_ = 0;
