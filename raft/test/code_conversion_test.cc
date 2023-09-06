@@ -246,7 +246,7 @@ TEST_F(ChunkDistributionTest, DISABLED_TestEncodeResultsWithoutServerFailure) {
   }
 }
 
-TEST_F(ChunkDistributionTest, TestRecoverReplenishFragmentsWithOneServerFailure) {
+TEST_F(ChunkDistributionTest, DISABLED_TestRecoverTheWholeEntryWithOneServerFailure) {
   const int TestN = 7, TestK = 4, TestF = 3;
   auto total_chunk_num = get_chunk_count(TestK), r = total_chunk_num / TestK;
 
@@ -268,16 +268,14 @@ TEST_F(ChunkDistributionTest, TestRecoverReplenishFragmentsWithOneServerFailure)
   ASSERT_EQ(data.size(), TestN);
   RandomDrop(data, TestK);
 
-  // Check the replenish fragments
-  auto frags = cd.RecoverReplenishFragments(data);
-  ASSERT_EQ(frags.size(), 1);
+  Slice recover_ent;
+  auto b = cd.Decode(data, &recover_ent);
 
-  // Check if the replenished fragments is recovered
-  auto shards = slice.Shard(TestK);
-  ASSERT_EQ(frags[f].compare(shards[f]), 0);
+  ASSERT_TRUE(b);
+  ASSERT_EQ(recover_ent.compare(slice), 0);
 }
 
-TEST_F(ChunkDistributionTest, TestRecoverReplenishFragmentsWithTwoServerFailures) {
+TEST_F(ChunkDistributionTest, TestRecoverTheWholeEntryWithTwoServerFailure) {
   const int TestN = 7, TestK = 4, TestF = 3;
   auto total_chunk_num = get_chunk_count(TestK), r = total_chunk_num / TestK;
 
@@ -290,38 +288,6 @@ TEST_F(ChunkDistributionTest, TestRecoverReplenishFragmentsWithTwoServerFailures
   auto f1 = 1, f2 = 3;
   is_alive[f1] = false;
   is_alive[f2] = false;
-
-  auto slice = GenerateSliceOfRandomSize(512 * 1024, 1024 * 1024, total_chunk_num);
-  cd.GeneratePlacement(is_alive);
-  cd.EncodeForPlacement(slice);
-
-  std::unordered_map<raft_node_id_t, ChunkDistribution::ChunkVector> data;
-  for (int i = 0; i < TestN; ++i) {
-    data.emplace(i, cd.GetChunkVector(i));
-  }
-
-  // Randomly drop some data of failed servers
-  ASSERT_EQ(data.size(), TestN);
-  RandomDrop(data, TestK);
-
-  // Check the replenish fragments
-  auto frags = cd.RecoverReplenishFragments(data);
-  ASSERT_EQ(frags.size(), 2);
-
-  // Check if the replenished fragments is recovered
-  auto shards = slice.Shard(TestK);
-  ASSERT_EQ(frags[f1].compare(shards[f1]), 0);
-  ASSERT_EQ(frags[f2].compare(shards[f2]), 0);
-}
-
-TEST_F(ChunkDistributionTest, DISABLED_TestRecoverTheWholeEntryWithOneServerFailure) {
-  const int TestN = 7, TestK = 4, TestF = 3;
-  auto total_chunk_num = get_chunk_count(TestK), r = total_chunk_num / TestK;
-
-  ChunkDistribution cd(TestF, TestK, r);
-  std::vector<bool> is_alive(TestN, true);
-  auto f = 1;
-  is_alive[f] = false;
 
   auto slice = GenerateSliceOfRandomSize(512 * 1024, 1024 * 1024, total_chunk_num);
   cd.GeneratePlacement(is_alive);

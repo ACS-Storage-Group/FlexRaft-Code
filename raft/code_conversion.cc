@@ -7,6 +7,7 @@
 #include "encoder.h"
 #include "log_entry.h"
 #include "raft_type.h"
+#include "util.h"
 
 namespace raft {
 
@@ -124,6 +125,8 @@ ChunkDistribution::ChunkPlacement ChunkDistribution::GeneratePlacement(std::vect
           ret.parity_servers_.push_back(i);
         }
       }
+    } else {
+      ret.fail_servers_.emplace_back(i);
     }
   }
 
@@ -215,7 +218,8 @@ void ChunkDistribution::EncodeForPlacement(const Slice& slice) {
   // need for replenish server
   if (placement_.replenish_server_num() != 0) {
     Encoder encoder;
-    for (int row = r_; row < r_ + placement_.replenish_chunk_cnt(); ++row) {
+    auto replenish_chunk_total = placement_.fail_server_num() * placement_.replenish_chunk_cnt();
+    for (int row = r_; row < r_ + replenish_chunk_total; ++row) {
       EncodeReplenishedChunk(&encoder, row);
     }
   }
@@ -255,7 +259,8 @@ std::map<raft_node_id_t, Slice> ChunkDistribution::RecoverReplenishFragments(
   // First try recovering the data that comes from the second encoding phase:
   Encoder decoder;
   std::vector<Slice> snd_phase_decode_output;
-  for (int i = r_; i < chunk_cnt_each; ++i) {
+
+  util::EnumerateIterator<int>(r_, chunk_cnt_each, 1).for_each([&](int i) {
     Encoder::EncodingResults decode_input;
     Slice decode_output;
     for (auto [id, chunk_vec] : chunk_vecs) {
@@ -267,7 +272,7 @@ std::map<raft_node_id_t, Slice> ChunkDistribution::RecoverReplenishFragments(
     }
     decoder.DecodeSlice(decode_input, replenish_server_cnt, F_, &decode_output);
     snd_phase_decode_output.emplace_back(decode_output);
-  }
+  });
 
   // Now construct the replenish data fragments:
   std::map<raft_node_id_t, Slice> replenish_fragments;
@@ -297,23 +302,14 @@ bool ChunkDistribution::Decode(std::unordered_map<raft_node_id_t, ChunkVector>& 
   Encoder::EncodingResults final_decode_input = RecoverReplenishFragments(chunk_vecs);
   Encoder final_decoder;
 
-  // Now construct the original data
-  for (auto& [id, chunk_vec] : chunk_vecs) {
-    if (chunk_vec.as_vec().size() == 0) {
-      continue;
-    }
-
-    // Already have k_ fragments
+  util::ContainerIterator(chunk_vecs, [](auto elem) {
+    return elem.second.as_vec().size() > 0;
+  }).for_each([&](auto elem) {
     if (final_decode_input.size() >= k_) {
-      break;
+      return;
     }
-
-    std::vector<Slice> vec;
-    for (int i = 0; i < r_; ++i) {
-      vec.emplace_back(chunk_vec.as_vec()[i].data);
-    }
-    final_decode_input.emplace(id, Slice::Combine(vec));
-  }
+    final_decode_input.emplace(elem.first, Slice::Combine(elem.second.SubVec(0, r_)));
+  });
 
   return final_decoder.DecodeSlice(final_decode_input, k_, F_, slice);
 }

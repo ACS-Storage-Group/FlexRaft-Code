@@ -1,6 +1,8 @@
 #pragma once
 #include <sys/select.h>
 
+#include <algorithm>
+
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
 
@@ -102,7 +104,7 @@ struct AppendEntriesRPCPerfCounter final : public PerfCounter {
 
   std::string ToString() const override {
     char buf[512];
-    sprintf(buf, "[AppendEntriesPerfRPCCounter: transfer_size(%" PRIu64") time(%" PRIu64" us)]",
+    sprintf(buf, "[AppendEntriesPerfRPCCounter: transfer_size(%" PRIu64 ") time(%" PRIu64 " us)]",
             this->transfer_size, this->pass_time);
     return std::string(buf);
   }
@@ -124,8 +126,8 @@ struct PersistencePerfCounter final : public PerfCounter {
 
   std::string ToString() const override {
     char buf[512];
-    sprintf(buf, "[PersistencePerfCounter: persist_size(%" PRIu64") time(%" PRIu64" us)]", this->persist_size,
-            this->pass_time);
+    sprintf(buf, "[PersistencePerfCounter: persist_size(%" PRIu64 ") time(%" PRIu64 " us)]",
+            this->persist_size, this->pass_time);
     return std::string(buf);
   }
 
@@ -146,8 +148,9 @@ struct RaftAppendEntriesProcessPerfCounter final : public PerfCounter {
   std::string ToString() const override {
     char buf[512];
     sprintf(buf,
-            "[RaftAppendEntriesProcessPerfCounter: process_size(%" PRIu64") "
-            "time(%" PRIu64" us)]",
+            "[RaftAppendEntriesProcessPerfCounter: process_size(%" PRIu64
+            ") "
+            "time(%" PRIu64 " us)]",
             this->process_size, this->pass_time);
     return std::string(buf);
   }
@@ -171,7 +174,7 @@ struct EncodingEntryPerfCounter final : public PerfCounter {
     char buf[512];
     sprintf(buf,
             "[EncodingEntryPerfCounter]: encoding_parameters(k=%d m=%d) "
-            "time(%" PRIu64" us)]",
+            "time(%" PRIu64 " us)]",
             this->encoding_k, this->encoding_m, this->pass_time);
     return std::string(buf);
   }
@@ -216,6 +219,57 @@ inline int lcm(const std::vector<int> &v) {
   }
   return ret;
 }
+
+// Some syntax sugar
+
+template <typename Container, typename Predicate>
+struct ContainerIterator {
+  using Iter = decltype(std::begin(std::declval<Container &>()));
+  using Val = decltype(*std::begin(std::declval<Container&>()));
+  Iter begin_, end_;
+  Predicate pred_;
+
+  static bool AlwaysTrue(Val v) { return true; }
+
+  ContainerIterator(Container &container, Predicate pred)
+      : begin_(container.begin()), end_(container.end()), pred_(pred) {}
+
+  // Run over each element that satisfies the predicate
+  template <typename UnaryFunction>
+  void for_each(UnaryFunction act) {
+    while (begin_ != end_) {
+      if (pred_(*begin_)) {
+        act(*begin_);
+      }
+      begin_ = std::next(begin_);
+    }
+  }
+};
+
+
+// A simple implementation of filter
+template <typename Container, typename Predicate>
+inline Container filter(const Container &container, Predicate pred) {
+  Container ret;
+  std::copy_if(container.begin(), container.end(), std::back_inserter(ret), pred);
+  return ret;
+}
+
+template <typename T>  // T must be integer
+struct EnumerateIterator {
+  T begin_, end_, sep_;
+
+  EnumerateIterator(T begin, T end, T sep) : begin_(begin), end_(end), sep_(sep) {}
+
+  // Run over this iterator
+  template <typename UnaryFunction>
+  void for_each(UnaryFunction act) {
+    while (begin_ < end_) {
+      act(begin_);
+      begin_ += sep_;
+    }
+  }
+};
 
 // Use singleton to access the global-only logger
 Logger *LoggerInstance();

@@ -97,17 +97,29 @@ class ChunkDistribution {
       chunks_.emplace_back(idx1, idx2, s);
     }
 
+    std::vector<Slice> SubVec(int l, int r) {
+      std::vector<Slice> ret;
+      for (int i = l; i < std::min(r, (int)chunks_.size()); ++i) {
+        ret.emplace_back(chunks_[i].data);
+      }
+      return ret;
+    }
+
     auto& as_vec() { return chunks_; }
   };
 
   struct ChunkPlacement {
     std::vector<std::vector<raft_chunk_index_t>> placement_;
+
     std::vector<raft_node_id_t> replenish_servers_;
     std::vector<raft_node_id_t> parity_servers_;
+    std::vector<raft_node_id_t> fail_servers_;
+
     int replenish_chunk_cnt_;
 
     int replenish_server_num() const { return replenish_servers_.size(); }
     int parity_server_num() const { return parity_servers_.size(); }
+    int fail_server_num() const { return fail_servers_.size(); }
     int replenish_chunk_cnt() const { return replenish_chunk_cnt_; }
 
     const auto& get_replenish_servers() const { return replenish_servers_; }
