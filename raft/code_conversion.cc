@@ -1,5 +1,6 @@
 #include "code_conversion.h"
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
@@ -156,9 +157,48 @@ void ChunkDistribution::PrepareOriginalChunks(const Slice& slice) {
 
   // Shard the fragments into chunks accordingly:
   for (int i = 0; i < k_ + F_; ++i) {
-    auto s = i < k_ ? input_slices[i] : output_slices[i - k_];
+    // Note that output_slices also contains the original data slice
+    auto s = output_slices[i];
     auto shard = s.Shard(r_);
     original_chunks_.insert(original_chunks_.end(), shard.begin(), shard.end());
+  }
+}
+
+void ChunkDistribution::AssignOriginalChunk(raft_node_id_t node, int r) {
+  auto& idx_vec = placement_.as_vec()[node];
+  int len = std::min(r, (int)idx_vec.size());
+  std::for_each(idx_vec.begin(), idx_vec.begin() + len, [=](const auto& idx) {
+    this->chunks_map_[node].AddChunk(idx, raft_chunk_index_t::InvalidChunkIndex(),
+                                     org_chunk_at(idx));
+  });
+}
+
+void ChunkDistribution::EncodeReplenishedChunk(Encoder* encoder, int row) {
+  auto replenish_server_sets = placement_.get_replenish_servers();
+  std::vector<Slice> encode_input, encode_output;
+  // Prepare the input
+  int encode_group_idx = 0, fail_server_id = -1;
+  for (const auto& node_id : replenish_server_sets) {
+    auto chunk_idx = placement_.At(node_id, row);
+    encode_input.emplace_back(org_chunk_at(chunk_idx));
+    chunks_map_[node_id].AddChunk(chunk_idx, raft_chunk_index_t(encode_group_idx, 0),
+                                  org_chunk_at(chunk_idx));
+    ++encode_group_idx;
+    fail_server_id = chunk_idx.node_id;
+  }
+
+  // Do the encoding:
+  auto encode_k = placement_.replenish_server_num(), encode_m = F_;
+  encoder->EncodeSlice(encode_input, encode_k, encode_m, encode_output);
+
+  // Assign encode output to the related server:
+  for (int i = 0; i < placement_.parity_server_num(); ++i) {
+    // TODO: Set a proper chunk index for this paraity
+    auto s = placement_.get_parity_servers()[i];
+    // Note that output_parity includes the original data slice
+    chunks_map_[s].AddChunk(raft_chunk_index_t(fail_server_id, -1),
+                            raft_chunk_index_t(i + replenish_server_sets.size(), 0),
+                            encode_output[i + encode_k]);
   }
 }
 
@@ -168,56 +208,21 @@ void ChunkDistribution::EncodeForPlacement(const Slice& slice) {
 
   // Assign the original chunks according to the placement:
   for (int i = 0; i < placement_.as_vec().size(); ++i) {
-    auto& idx_vec = placement_.as_vec()[i];
-    for (int j = 0; j < std::min(r_, (int)idx_vec.size()); ++j) {
-      chunks_map_[i].AddChunk(idx_vec[j], raft_chunk_index_t::InvalidChunkIndex(),
-                              org_chunk_at(idx_vec[j]));
-    }
+    AssignOriginalChunk(i, r_);
   }
 
-  /// Do the second-phase encoding accordingly:
-  // Second-phase encoding is not needed
-  if (placement_.replenish_server_num() == 0) {
-    return;
-  }
-
-  // Then for each replenish server: generate the parity chunk for the replenished chunk
-  Encoder encoder;
-  auto redistr_cnt = placement_.replenish_chunk_cnt();
-  auto replenish_server_sets = placement_.get_replenish_servers();
-  for (int i = 0; i < redistr_cnt; ++i) {  // For each replenish chunk group
-    std::vector<Slice> input_slices, output_parity;
-
-    int fail_server_id = -1;
-
-    // Prepare the input
-    for (int j = 0; j < replenish_server_sets.size(); ++j) {
-      auto node = replenish_server_sets[j];
-      auto chunk_idx = placement_.as_vec()[node][i + r_];
-      input_slices.emplace_back(org_chunk_at(chunk_idx));
-      chunks_map_[node].AddChunk(chunk_idx, raft_chunk_index_t(j, 0), org_chunk_at(chunk_idx));
-      fail_server_id = chunk_idx.node_id;
-    }
-
-
-    // Do the encoding:
-    encoder.EncodeSlice(input_slices, placement_.replenish_server_num(), F_, output_parity);
-
-    // Then distribute the generated parity chunk to live servers:
-    for (int i = 0; i < placement_.parity_server_num(); ++i) {
-      // TODO: Set a proper chunk index for this paraity
-      auto s = placement_.get_parity_servers()[i];
-      chunks_map_[s].AddChunk(raft_chunk_index_t(fail_server_id, -1),
-                              raft_chunk_index_t(i + replenish_server_sets.size(), 0),
-                              output_parity[i]);
+  // Do the second-phase encoding accordingly: return directly if there is no
+  // need for replenish server
+  if (placement_.replenish_server_num() != 0) {
+    Encoder encoder;
+    for (int row = r_; row < r_ + placement_.replenish_chunk_cnt(); ++row) {
+      EncodeReplenishedChunk(&encoder, row);
     }
   }
 }
 
-// Decode input ChunkVectors to get the original data, write it into the resultant slice
-bool ChunkDistribution::Decode(std::unordered_map<raft_node_id_t, ChunkVector>& chunk_vecs,
-                               Slice* slice) {
-  // First, check if the replenished chunks can be recovered:
+std::map<raft_node_id_t, Slice> ChunkDistribution::RecoverReplenishFragments(
+    std::unordered_map<raft_node_id_t, ChunkVector>& chunk_vecs) {
   int chunk_cnt_each = 0;
   std::set<raft_node_id_t> fail_server_sets;
   for (auto& [id, chunk_vec] : chunk_vecs) {
@@ -265,36 +270,40 @@ bool ChunkDistribution::Decode(std::unordered_map<raft_node_id_t, ChunkVector>& 
   }
 
   // Now construct the replenish data fragments:
-  std::vector<Slice> replenish_fragments;
+  std::map<raft_node_id_t, Slice> replenish_fragments;
   int off = 0;
-  for (int f = 0; f < fail_server_cnt; ++f) {
+  auto iter = fail_server_sets.begin();
+  for (int f = 0; f < fail_server_cnt; ++f, ++iter) {
     std::vector<Slice> replenish_fragments_input;
     for (int i = 0; i < replenish_server_cnt; ++i) {
       for (int j = 0; j < replenish_chunk_cnt_each; ++j) {
+        // Note that the slice in snd_phase_decode_output is only the replenish fragments
+        // So use replenish_server_cnt to shard, instead of replenish_server_cnt + F_ to shard
         replenish_fragments_input.emplace_back(
-            snd_phase_decode_output[j + off].Shard(replenish_chunk_cnt_each + F_).at(i));
+            snd_phase_decode_output[j + off].Shard(replenish_server_cnt).at(i));
       }
     }
     off += replenish_chunk_cnt_each;
     auto replenish_fragment = Slice::Combine(replenish_fragments_input);
-    replenish_fragments.emplace_back(replenish_fragment);
+    replenish_fragments.emplace(*iter, replenish_fragment);
   }
 
-  Encoder::EncodingResults final_decode_input;
+  return replenish_fragments;
+}
+
+// Decode input ChunkVectors to get the original data, write it into the resultant slice
+bool ChunkDistribution::Decode(std::unordered_map<raft_node_id_t, ChunkVector>& chunk_vecs,
+                               Slice* slice) {
+  Encoder::EncodingResults final_decode_input = RecoverReplenishFragments(chunk_vecs);
   Encoder final_decoder;
-  auto iter = fail_server_sets.begin();
-  for (int i = 0; i < replenish_fragments.size(); ++i) {
-    final_decode_input.emplace(*iter, replenish_fragments[i]);
-  }
-
-  assert(fail_server_sets.size() == fail_server_cnt);
 
   // Now construct the original data
-  for (auto &[id, chunk_vec] : chunk_vecs) {
+  for (auto& [id, chunk_vec] : chunk_vecs) {
     if (chunk_vec.as_vec().size() == 0) {
       continue;
     }
 
+    // Already have k_ fragments
     if (final_decode_input.size() >= k_) {
       break;
     }

@@ -7,6 +7,7 @@
 #include <sstream>
 #include <unordered_map>
 
+#include "encoder.h"
 #include "log_entry.h"
 #include "raft_type.h"
 #include "util.h"
@@ -119,6 +120,10 @@ class ChunkDistribution {
       replenish_servers_.clear();
       parity_servers_.clear();
     }
+
+    const auto& At(int node, int id) {
+      return placement_[node][id];
+    }
   };
 
   ChunkDistribution() = default;
@@ -140,6 +145,18 @@ class ChunkDistribution {
   // Decode input ChunkVectors to get the original data, write it into the resultant slice
   bool Decode(std::unordered_map<raft_node_id_t, ChunkVector>& chunks, Slice* slice);
 
+  auto GetChunkVector(raft_node_id_t id) -> ChunkVector {
+    if (chunks_map_.count(id) != 0) {
+      return chunks_map_[id];
+    }
+    return ChunkVector{};
+  }
+
+  // Given the data chunks of each alive server, return the replenish fragments
+  auto RecoverReplenishFragments(std::unordered_map<raft_node_id_t, ChunkVector>& chunks)
+      -> std::map<raft_node_id_t, Slice>;
+
+ private:
   void PrepareOriginalChunks(const Slice& slice);
 
   Slice org_chunk_at(raft_chunk_index_t idx) {
@@ -157,12 +174,10 @@ class ChunkDistribution {
     return ret;
   }
 
-  auto GetChunkVector(raft_node_id_t id) -> ChunkVector {
-    if (chunks_map_.count(id) != 0) {
-      return chunks_map_[id];
-    }
-    return ChunkVector{};
-  }
+  // Assign the first r chunks to a specific raft node, according to the placement generated
+  void AssignOriginalChunk(raft_node_id_t node, int r);
+
+  void EncodeReplenishedChunk(Encoder* encoder, int row);
 
  private:
   int F_, k_, r_;

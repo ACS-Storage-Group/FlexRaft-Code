@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <unordered_map>
 
 #include "gtest/gtest.h"
 #include "raft_type.h"
@@ -29,6 +30,14 @@ class ChunkDistributionTest : public ::testing::Test {
 
   Slice GenerateSliceOfRandomSize(int l_min, int l_max, int k) {
     return GenerateRandomSlice(GetRandomSizeDivide(l_min, l_max, k));
+  }
+
+  template <typename T>
+  void RandomDrop(T& container, int limit) {
+    while (container.size() > limit) {
+      auto remove_iter = std::next(std::begin(container), rand() % container.size());
+      container.erase(remove_iter);
+    }
   }
 };
 
@@ -237,7 +246,38 @@ TEST_F(ChunkDistributionTest, DISABLED_TestEncodeResultsWithoutServerFailure) {
   }
 }
 
-TEST_F(ChunkDistributionTest, TestEncodeResultsWithOneServerFailure) {
+TEST_F(ChunkDistributionTest, TestRecoverReplenishFragmentsWithOneServerFailure) {
+  const int TestN = 7, TestK = 4, TestF = 3;
+  auto total_chunk_num = get_chunk_count(TestK), r = total_chunk_num / TestK;
+
+  ChunkDistribution cd(TestF, TestK, r);
+  std::vector<bool> is_alive(TestN, true);
+  auto f = 1;
+  is_alive[f] = false;
+
+  auto slice = GenerateSliceOfRandomSize(512 * 1024, 1024 * 1024, total_chunk_num);
+  cd.GeneratePlacement(is_alive);
+  cd.EncodeForPlacement(slice);
+
+  std::unordered_map<raft_node_id_t, ChunkDistribution::ChunkVector> data;
+  for (int i = 0; i < TestN; ++i) {
+    data.emplace(i, cd.GetChunkVector(i));
+  }
+
+  // Randomly drop some data of failed servers
+  ASSERT_EQ(data.size(), TestN);
+  RandomDrop(data, TestK);
+
+  // Check the replenish fragments
+  auto frags = cd.RecoverReplenishFragments(data);
+  ASSERT_EQ(frags.size(), 1);
+
+  // Check if the replenished fragments is recovered
+  auto shards = slice.Shard(TestK);
+  ASSERT_EQ(frags[f].compare(shards[f]), 0);
+}
+
+TEST_F(ChunkDistributionTest, TestRecoverReplenishFragmentsWithTwoServerFailures) {
   const int TestN = 7, TestK = 4, TestF = 3;
   auto total_chunk_num = get_chunk_count(TestK), r = total_chunk_num / TestK;
 
@@ -247,33 +287,60 @@ TEST_F(ChunkDistributionTest, TestEncodeResultsWithOneServerFailure) {
 
   ChunkDistribution cd(TestF, TestK, r);
   std::vector<bool> is_alive(TestN, true);
+  auto f1 = 1, f2 = 3;
+  is_alive[f1] = false;
+  is_alive[f2] = false;
+
+  auto slice = GenerateSliceOfRandomSize(512 * 1024, 1024 * 1024, total_chunk_num);
+  cd.GeneratePlacement(is_alive);
+  cd.EncodeForPlacement(slice);
+
+  std::unordered_map<raft_node_id_t, ChunkDistribution::ChunkVector> data;
+  for (int i = 0; i < TestN; ++i) {
+    data.emplace(i, cd.GetChunkVector(i));
+  }
+
+  // Randomly drop some data of failed servers
+  ASSERT_EQ(data.size(), TestN);
+  RandomDrop(data, TestK);
+
+  // Check the replenish fragments
+  auto frags = cd.RecoverReplenishFragments(data);
+  ASSERT_EQ(frags.size(), 2);
+
+  // Check if the replenished fragments is recovered
+  auto shards = slice.Shard(TestK);
+  ASSERT_EQ(frags[f1].compare(shards[f1]), 0);
+  ASSERT_EQ(frags[f2].compare(shards[f2]), 0);
+}
+
+TEST_F(ChunkDistributionTest, DISABLED_TestRecoverTheWholeEntryWithOneServerFailure) {
+  const int TestN = 7, TestK = 4, TestF = 3;
+  auto total_chunk_num = get_chunk_count(TestK), r = total_chunk_num / TestK;
+
+  ChunkDistribution cd(TestF, TestK, r);
+  std::vector<bool> is_alive(TestN, true);
   auto f = 1;
   is_alive[f] = false;
 
-  // Generate placement
-  cd.GeneratePlacement(is_alive);
-
-  // Generate a random slice
   auto slice = GenerateSliceOfRandomSize(512 * 1024, 1024 * 1024, total_chunk_num);
-
-  // Do encoding
+  cd.GeneratePlacement(is_alive);
   cd.EncodeForPlacement(slice);
 
-  // Check the chunk vector size:
+  std::unordered_map<raft_node_id_t, ChunkDistribution::ChunkVector> data;
   for (int i = 0; i < TestN; ++i) {
-    if (i != f) {
-      ASSERT_EQ(cd.GetChunkVector(i).as_vec().size(), r + 2);
-    }
+    data.emplace(i, cd.GetChunkVector(i));
   }
-  ASSERT_EQ(cd.GetChunkVector(f).as_vec().size(), 0);
 
-  for (int i = 0; i < TestN; ++i) {
-    auto tmp = cd.GetChunkVector(i);
-    for (const auto& chunk : tmp.as_vec()) {
-      std::cout << chunk.ToString() << " ";
-    }
-    std::cout << std::endl;
-  }
+  // Randomly drop some data of failed servers
+  ASSERT_EQ(data.size(), TestN);
+  RandomDrop(data, TestK);
+
+  Slice recover_ent;
+  auto b = cd.Decode(data, &recover_ent);
+
+  ASSERT_TRUE(b);
+  ASSERT_EQ(recover_ent.compare(slice), 0);
 }
 
 };  // namespace raft

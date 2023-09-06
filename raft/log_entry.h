@@ -60,6 +60,7 @@ class Slice {
     return v;
   }
 
+  // Combine the contents of multiple slices into one single slice
   static auto Combine(const std::vector<Slice>& slices) -> Slice {
     size_t alloc_sz = 0;
     for (const auto& s : slices) alloc_sz += s.size();
