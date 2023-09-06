@@ -222,29 +222,30 @@ inline int lcm(const std::vector<int> &v) {
 
 // Some syntax sugar
 
-template <typename Container, typename Predicate>
-struct ContainerIterator {
-  using Iter = decltype(std::begin(std::declval<Container &>()));
-  using Val = decltype(*std::begin(std::declval<Container&>()));
-  Iter begin_, end_;
-  Predicate pred_;
+// template <typename Container, typename Predicate>
+// struct ContainerIterator {
+//   using Iter = decltype(std::begin(std::declval<Container &>()));
+//   using Val = decltype(*std::begin(std::declval<Container&>()));
+//   Iter begin_, end_;
+//   Predicate pred_;
 
-  static bool AlwaysTrue(Val v) { return true; }
+//   static bool AlwaysTrue(Val v) { return true; }
 
-  ContainerIterator(Container &container, Predicate pred)
-      : begin_(container.begin()), end_(container.end()), pred_(pred) {}
+//   ContainerIterator(Container &container, Predicate pred)
+//       : begin_(container.begin()), end_(container.end()), pred_(pred) {}
 
-  // Run over each element that satisfies the predicate
-  template <typename UnaryFunction>
-  void for_each(UnaryFunction act) {
-    while (begin_ != end_) {
-      if (pred_(*begin_)) {
-        act(*begin_);
-      }
-      begin_ = std::next(begin_);
-    }
-  }
-};
+//   // Run over each element that satisfies the predicate
+//   template <typename UnaryFunction>
+//   void for_each(UnaryFunction act) {
+//     while (begin_ != end_) {
+//       if (pred_(*begin_)) {
+//         act(*begin_);
+//       }
+//       begin_ = std::next(begin_);
+//     }
+//   }
+// };
+
 
 
 // A simple implementation of filter

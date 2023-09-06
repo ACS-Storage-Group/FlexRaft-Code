@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "encoder.h"
+#include "iter.h"
 #include "log_entry.h"
 #include "raft_type.h"
 #include "util.h"
@@ -260,7 +261,7 @@ std::map<raft_node_id_t, Slice> ChunkDistribution::RecoverReplenishFragments(
   Encoder decoder;
   std::vector<Slice> snd_phase_decode_output;
 
-  util::EnumerateIterator<int>(r_, chunk_cnt_each, 1).for_each([&](int i) {
+  util::Enumerator<int>(r_, chunk_cnt_each, 1).for_each([&](int i) {
     Encoder::EncodingResults decode_input;
     Slice decode_output;
     for (auto [id, chunk_vec] : chunk_vecs) {
@@ -278,20 +279,34 @@ std::map<raft_node_id_t, Slice> ChunkDistribution::RecoverReplenishFragments(
   std::map<raft_node_id_t, Slice> replenish_fragments;
   int off = 0;
   auto iter = fail_server_sets.begin();
-  for (int f = 0; f < fail_server_cnt; ++f, ++iter) {
+  // for (int f = 0; f < fail_server_cnt; ++f, ++iter) {
+  //   std::vector<Slice> replenish_fragments_input;
+  //   for (int i = 0; i < replenish_server_cnt; ++i) {
+  //     for (int j = 0; j < replenish_chunk_cnt_each; ++j) {
+  //       // Note that the slice in snd_phase_decode_output is only the replenish fragments
+  //       // So use replenish_server_cnt to shard, instead of replenish_server_cnt + F_ to shard
+  //       replenish_fragments_input.emplace_back(
+  //           snd_phase_decode_output[j + off].Shard(replenish_server_cnt).at(i));
+  //     }
+  //   }
+  //   off += replenish_chunk_cnt_each;
+  //   auto replenish_fragment = Slice::Combine(replenish_fragments_input);
+  //   replenish_fragments.emplace(*iter, replenish_fragment);
+  // }
+
+  util::Enumerator<int>(0, fail_server_cnt, 1).for_each([&](int f) {
     std::vector<Slice> replenish_fragments_input;
-    for (int i = 0; i < replenish_server_cnt; ++i) {
-      for (int j = 0; j < replenish_chunk_cnt_each; ++j) {
-        // Note that the slice in snd_phase_decode_output is only the replenish fragments
-        // So use replenish_server_cnt to shard, instead of replenish_server_cnt + F_ to shard
-        replenish_fragments_input.emplace_back(
-            snd_phase_decode_output[j + off].Shard(replenish_server_cnt).at(i));
-      }
-    }
+    util::NestedIterator(util::Enumerator(0, replenish_server_cnt, 1),
+                         util::Enumerator(0, replenish_chunk_cnt_each, 1))
+        .for_each([&](int i, int j) {
+          replenish_fragments_input.emplace_back(
+              snd_phase_decode_output[j + off].Shard(replenish_server_cnt).at(i));
+        });
     off += replenish_chunk_cnt_each;
     auto replenish_fragment = Slice::Combine(replenish_fragments_input);
     replenish_fragments.emplace(*iter, replenish_fragment);
-  }
+    ++iter;
+  });
 
   return replenish_fragments;
 }
@@ -302,14 +317,26 @@ bool ChunkDistribution::Decode(std::unordered_map<raft_node_id_t, ChunkVector>& 
   Encoder::EncodingResults final_decode_input = RecoverReplenishFragments(chunk_vecs);
   Encoder final_decoder;
 
-  util::ContainerIterator(chunk_vecs, [](auto elem) {
-    return elem.second.as_vec().size() > 0;
-  }).for_each([&](auto elem) {
-    if (final_decode_input.size() >= k_) {
-      return;
-    }
-    final_decode_input.emplace(elem.first, Slice::Combine(elem.second.SubVec(0, r_)));
-  });
+  // util::ContainerIterator(chunk_vecs)
+  //     .filter([](auto elem) { return elem.second.as_vec().size() > 0; })
+  //     .for_each([&](auto elem) {
+  //       if (final_decode_input.size() >= k_) {
+  //         return;
+  //       }
+  //       final_decode_input.emplace(elem.first, Slice::Combine(elem.second.SubVec(0, r_)));
+  //     });
+
+  auto iter =
+      // ContainerIterator<decltype(chunk_vecs), decltype(*chunk_vecs.begin())>(chunk_vecs)
+      ContainerIterator(chunk_vecs)
+          .filter([](auto elem) { return elem.second.as_vec().size() > 0; })
+          ->for_each([&](auto elem) {
+            if (final_decode_input.size() >= k_) {
+              return;
+            }
+            final_decode_input.emplace(elem.first, Slice::Combine(elem.second.SubVec(0, r_)));
+          });
+  // delete iter;
 
   return final_decoder.DecodeSlice(final_decode_input, k_, F_, slice);
 }
