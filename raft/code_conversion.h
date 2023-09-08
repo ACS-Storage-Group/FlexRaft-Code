@@ -31,11 +31,12 @@ typedef struct ChunkIndex {
   int16_t chunk_id = kInvalidNum;
 
   ChunkIndex(int16_t node_id, int16_t chunk_id) : node_id(node_id), chunk_id(chunk_id) {}
+  ChunkIndex() = default;
 
   ChunkIndex(const ChunkIndex&) = default;
   ChunkIndex& operator=(const ChunkIndex&) = default;
 
-  bool Valid() { return node_id != kInvalidNum && chunk_id != kInvalidNum; }
+  bool Valid() const { return node_id != kInvalidNum && chunk_id != kInvalidNum; }
 
   static ChunkIndex InvalidChunkIndex() { return ChunkIndex(kInvalidNum, kInvalidNum); }
 
@@ -47,6 +48,18 @@ typedef struct ChunkIndex {
 
   friend bool operator==(const ChunkIndex& left, const ChunkIndex& right) {
     return left.chunk_id == right.chunk_id && left.node_id == right.node_id;
+  }
+
+  char* Serialize(char *d) const {
+    *(int16_t*)d = node_id;
+    *(int16_t*)(d + sizeof(int16_t)) = chunk_id;
+    return d + sizeof(int16_t) * 2;
+  }
+
+  char* Deserialize(char *s) {
+    node_id = *(int16_t*)s;
+    chunk_id = *(int16_t*)(s + sizeof(int16_t));
+    return s + sizeof(int16_t) * 2;
   }
 
 } raft_chunk_index_t;

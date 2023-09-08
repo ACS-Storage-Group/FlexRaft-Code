@@ -20,6 +20,7 @@ TEST(TestIter, TestFilterIterator) {
   }
 
   auto c = res->collect<std::vector<int>>();
+  
   ASSERT_EQ(c.size(), 3);
   ASSERT_EQ(c[0], 15 * 15);
   ASSERT_EQ(c[1], 17 * 17);

@@ -16,7 +16,7 @@ class ChunkDistributionTest : public ::testing::Test {
  public:
   size_t GetRandomSizeDivide(int l_min, int l_max, int k) {
     auto s = rand() % (l_max - l_min) + l_min;
-    return s + (k - s % k);
+    return s % k == 0 ? s : s + (k - s % k);
   }
 
   Slice GenerateRandomSlice(size_t sz) {
@@ -28,9 +28,11 @@ class ChunkDistributionTest : public ::testing::Test {
     return Slice(rand_data, sz);
   }
 
-  Slice GenerateSliceOfRandomSize(int l_min, int l_max, int k) {
+  Slice GenerateSliceOfRandomSize(int l_min, int l_max, int k = 1) {
     return GenerateRandomSlice(GetRandomSizeDivide(l_min, l_max, k));
   }
+
+  ChunkIndex GenerateRandomChunkIndex() { return ChunkIndex(rand() % 100, rand() % 100); }
 
   template <typename T>
   void RandomDrop(T& container, int limit) {
@@ -307,6 +309,33 @@ TEST_F(ChunkDistributionTest, TestRecoverTheWholeEntryWithTwoServerFailure) {
 
   ASSERT_TRUE(b);
   ASSERT_EQ(recover_ent.compare(slice), 0);
+}
+
+TEST_F(ChunkDistributionTest, TestChunkVectorSerialization) {
+  // Construct the ChunkVector first
+  const int elem_cnt = 10;
+  ChunkDistribution::ChunkVector cv;
+  for (int i = 0; i < elem_cnt; ++i) {
+    cv.AddChunk(GenerateRandomChunkIndex(), GenerateRandomChunkIndex(),
+                GenerateRandomSlice(512 * 1024));
+  }
+
+  auto s_cv = cv.Serialize();
+  ASSERT_NE(s_cv.data(), nullptr);
+  ASSERT_GE(s_cv.size(), 0);
+
+  // Deserialize the slice
+  ChunkDistribution::ChunkVector d_cv;
+  auto b = d_cv.Deserialize(s_cv);
+  ASSERT_TRUE(b);
+  ASSERT_EQ(d_cv.chunks_.size(), cv.chunks_.size());
+
+  // Compare that each vector element equals
+  for (int i = 0; i < cv.as_vec().size(); ++i) {
+    ASSERT_EQ(d_cv.as_vec()[i].idx1, cv.as_vec()[i].idx1);
+    ASSERT_EQ(d_cv.as_vec()[i].idx2, cv.as_vec()[i].idx2);
+    ASSERT_EQ(cv.as_vec()[i].data.compare(d_cv.as_vec()[i].data), 0);
+  }
 }
 
 };  // namespace raft

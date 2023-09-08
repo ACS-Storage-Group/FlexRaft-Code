@@ -1,6 +1,7 @@
 #include "code_conversion.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <memory>
 #include <utility>
 
@@ -30,57 +31,67 @@ raft_chunk_id_t convert_to_chunk_id(raft_chunk_index_t d, int r) {
 }
 
 Slice ChunkDistribution::ChunkVector::Serialize() {
-  // Calculate the size of the serialized data
-  // auto hdr_sz_for_each = sizeof(raft_chunk_index_t) + sizeof(uint32_t) * 2;
-  // auto hdr_sz = sizeof(uint32_t) + hdr_sz_for_each * chunks_.size();
-  // auto alloc_sz = hdr_sz;
-  // // for (const auto& [idx, s] : chunks_) {
-  // //   alloc_sz += s.size();
-  // // }
+  // Calculate the size of the serialized data:
+  // We need the space for two chunk index. And two uint32_t for locating the slice
+  auto hdr_sz_for_each = sizeof(raft_chunk_index_t) * 2 + sizeof(uint32_t) * 2;
+  auto hdr_sz = sizeof(uint32_t) + hdr_sz_for_each * chunks_.size();
+  auto alloc_sz = hdr_sz;
+  for (const auto& chunk : chunks_) {
+    alloc_sz += chunk.data.size();
+  }
 
-  // auto d = new char[alloc_sz];
+  auto d = new char[alloc_sz];
 
-  // // Serialize the header part and data part for each contained data
-  // int h_offset = sizeof(uint32_t), d_offset = hdr_sz;
-  // // for (const auto& [idx, s] : chunks_) {
-  // //   *(uint32_t*)(d + h_offset) = idx.node_id;
-  // //   *(uint32_t*)(d + h_offset + sizeof(uint32_t)) = idx.chunk_id;
-  // //   *(uint32_t*)(d + h_offset + sizeof(uint32_t) * 2) = d_offset;
-  // //   *(uint32_t*)(d + h_offset + sizeof(uint32_t) * 3) = s.size();
+  // Serialize the data
+  int h_offset = sizeof(uint32_t), d_offset = hdr_sz;
+  for (const auto& chunk : chunks_) {
+    // Firstly write the data
+    std::memcpy(d + d_offset, chunk.data.data(), chunk.data.size());
 
-  // //   std::memcpy(d + d_offset, s.data(), s.size());
-  // //   d_offset += s.size();
-  // //   h_offset += sizeof(uint32_t) * 4;
-  // // }
+    // Serialize the two ChunkIndex attributes
+    char* tmp = chunk.idx1.Serialize(d + h_offset);
+    tmp = chunk.idx2.Serialize(tmp);
 
-  // *(uint32_t*)d = chunks_.size();
+    // Serialize the pointer to the data slice
+    *(uint32_t*)tmp = d_offset;
+    *(uint32_t*)(tmp + sizeof(uint32_t)) = chunk.data.size();
 
-  // return Slice(d, alloc_sz);
-  return Slice();
+    // Update the header information
+    h_offset = tmp - d + sizeof(uint32_t) * 2;
+    d_offset += chunk.data.size();
+  }
+
+  // Record the number of elements stored in this ChunkVector
+  *(uint32_t*)d = chunks_.size();
+
+  return Slice(d, alloc_sz);
 }
 
 bool ChunkDistribution::ChunkVector::Deserialize(const Slice& s) {
-  // this->chunks_.clear();
+  this->chunks_.clear();
 
-  // // First get the number of chunk within this slice
-  // auto d = s.data();
-  // uint32_t chunk_count = *(uint32_t*)d;
+  // Firstly, get the number of chunk within this slice
+  auto d = s.data();
+  uint32_t chunk_count = *(uint32_t*)d;
 
-  // // read each chunk one by one
-  // uint32_t h_off = sizeof(uint32_t);
-  // for (uint32_t i = 0; i < chunk_count; ++i) {
-  //   auto idx1 = *(uint16_t*)d, idx2 = *(uint16_t*)(d + sizeof(uint32_t));
-  //   auto d_off = *(uint32_t*)(d + sizeof(uint32_t) * 2);
-  //   auto sz = *(uint32_t*)(d + sizeof(uint32_t) * 3);
+  uint32_t h_off = sizeof(uint32_t);
+  for (uint32_t i = 0; i < chunk_count; ++i) {
+    ChunkIndex idx1, idx2;
+    char* tmp = idx1.Deserialize(d + h_off);
+    tmp = idx2.Deserialize(tmp);
 
-  //   // Corrupted data
-  //   if (d_off >= s.size() || d_off + sz >= s.size()) {
-  //     return false;
-  //   }
+    auto d_off = *(uint32_t*)(tmp);
+    auto sz = *(uint32_t*)(tmp + sizeof(uint32_t));
 
-  //   // chunks_.emplace_back(raft_chunk_index_t{idx1, idx2}, Slice(d + d_off, sz));
-  //   h_off += sizeof(uint32_t) * 4;
-  // }
+    // Corrupted data
+    if (d_off >= s.size() || d_off + sz > s.size()) {
+      return false;
+    }
+
+    chunks_.emplace_back(idx1, idx2, Slice(d + d_off, sz));
+    h_off = tmp - d + sizeof(uint32_t) * 2;
+  }
+
   return true;
 }
 
@@ -327,16 +338,15 @@ bool ChunkDistribution::Decode(std::unordered_map<raft_node_id_t, ChunkVector>& 
   //     });
 
   auto iter =
-      // ContainerIterator<decltype(chunk_vecs), decltype(*chunk_vecs.begin())>(chunk_vecs)
-      ContainerIterator(chunk_vecs)
-          .filter([](auto elem) { return elem.second.as_vec().size() > 0; })
+      NewContainerIter(chunk_vecs)
+          ->filter([](auto elem) { return elem.second.as_vec().size() > 0; })
           ->for_each([&](auto elem) {
             if (final_decode_input.size() >= k_) {
               return;
             }
             final_decode_input.emplace(elem.first, Slice::Combine(elem.second.SubVec(0, r_)));
           });
-  // delete iter;
+  delete iter;
 
   return final_decoder.DecodeSlice(final_decode_input, k_, F_, slice);
 }
