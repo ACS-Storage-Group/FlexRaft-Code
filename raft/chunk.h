@@ -102,6 +102,7 @@ struct ChunkVector {
   ChunkVector() = default;
   ChunkVector(const ChunkVector&) = default;
   ChunkVector& operator=(const ChunkVector&) = default;
+  ~ChunkVector() = default;
 
   // Append a new chunk to current ChunkVector
   void AddChunk(ChunkIndex idx1, ChunkIndex idx2, Slice s) { chunks_.emplace_back(idx1, idx2, s); }
@@ -112,7 +113,7 @@ struct ChunkVector {
   // Deserialize the ChunkVector from a slice
   bool Deserialize(const Slice& s);
 
-  ChunkVector SubVec(int l, int r) {
+  ChunkVector SubVec(int l, int r) const {
     ChunkVector ret;
     for (int i = l; i < std::min(r, (int)chunks_.size()); ++i) {
       ret.chunks_.emplace_back(chunks_[i]);
@@ -128,10 +129,21 @@ struct ChunkVector {
   }
 
   // Return the chunk of located at specific index
-  Chunk chunk_at(int idx) { return chunks_[idx]; }
+  Chunk chunk_at(int idx) const { return chunks_[idx]; }
+
+  // Return the size of this chunk vector
+  size_t size() const { return chunks_.size(); }
 
   // return the whole vector
   const auto& as_vec() const { return chunks_; }
+
+  auto as_slice_vec() -> std::vector<Slice> const {
+    std::vector<Slice> ret;
+    for (const auto& c : chunks_) {
+      ret.emplace_back(c.slice());
+    }
+    return ret;
+  }
 };
 
 // ChunkPlacementInfo represents the basic liveness states of a server

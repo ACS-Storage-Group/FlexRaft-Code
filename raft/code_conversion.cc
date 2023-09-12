@@ -260,10 +260,10 @@ void CodeConversionManagement::EncodeReservedChunksAndAssignToNode(const ChunkDi
 
     for (const auto& reserve_node_id : reserved_servers) {
       auto cidx = cd.GetAssignedReserveChunks(reserve_node_id).at(row);
-      add_original_chunks(reserve_node_id, cidx, ChunkIndex(encode_group_idx, 0),
+      add_reserved_chunks(reserve_node_id, cidx, ChunkIndex(encode_group_idx, 0),
                           org_chunks_[cidx.node_id][cidx.chunk_id]);
       encode_input.emplace_back(org_chunks_[cidx.node_id][cidx.chunk_id]);
-      encode_group_idx += 1;
+      ++encode_group_idx;
       fail_server_id = cidx.node_id;
     }
 
@@ -274,7 +274,7 @@ void CodeConversionManagement::EncodeReservedChunksAndAssignToNode(const ChunkDi
 
     // Now write the encoding results
     for (const auto& parity_node_id : parity_servers) {
-      add_reserved_chunks(parity_node_id, ChunkIndex(fail_server_id, 0),
+      add_reserved_chunks(parity_node_id, ChunkIndex(fail_server_id, -1),
                           ChunkIndex(encode_group_idx, 0), encode_output[encode_group_idx]);
       ++encode_group_idx;
     }
@@ -287,10 +287,21 @@ void CodeConversionManagement::EncodeReservedChunksAndAssignToNode(const ChunkDi
 
 void CodeConversionManagement::EncodeForPlacement(const Slice& slice,
                                                   const std::vector<bool>& live_vec) {
+  util::LatencyGuard guard([](uint64_t us) { printf("Encode cost: %lu us\n", us); });
+  PrepareOriginalChunks(slice);
+
   ChunkDistribution cd(k_, F_, r_);
   cd.GenerateChunkDistribution(live_vec);
+
   AssignOriginalChunksToNode(cd);
   EncodeReservedChunksAndAssignToNode(cd);
+}
+
+void CodeConversionManagement::AdjustChunkDistribution(std::vector<bool>& live_vec) {
+  util::LatencyGuard guard([](uint64_t us) { printf("Adjust cost: %lu us\n", us); });
+  ChunkDistribution cd(k_, F_, r_);
+  cd.GenerateChunkDistribution(live_vec);
+  AdjustChunkDistribution(cd);
 }
 
 std::map<raft_node_id_t, Slice> CodeConversionManagement::RecoverReservedChunks(
@@ -380,30 +391,44 @@ std::map<raft_node_id_t, Slice> CodeConversionManagement::RecoverReservedChunks(
 
 bool CodeConversionManagement::DecodeCollectedChunkVec(
     const std::map<raft_node_id_t, ChunkVector>& input, Slice* slice) {
+  util::LatencyGuard guard([](uint64_t us) { printf("Decode cost: %lu us\n", us); });
   Encoder::EncodingResults final_decode_input = RecoverReservedChunks(input);
   Encoder final_decoder;
 
-  // util::ContainerIterator(chunk_vecs)
-  //     .filter([](auto elem) { return elem.second.as_vec().size() > 0; })
-  //     .for_each([&](auto elem) {
-  //       if (final_decode_input.size() >= k_) {
-  //         return;
-  //       }
-  //       final_decode_input.emplace(elem.first, Slice::Combine(elem.second.SubVec(0, r_)));
-  //     });
-
-  auto iter =
-      NewContainerIter(input)
-          ->filter([](auto elem) { return elem.second.as_vec().size() > 0; })
-          ->for_each([&](auto elem) {
-            if (final_decode_input.size() >= k_) {
-              return;
-            }
-            final_decode_input.emplace(elem.first, Slice::Combine(elem.second.SubVec(0, r_)));
-          });
-  delete iter;
+  iter::NewContainerIterator(input)
+      .filter([](auto elem) { return elem.second.as_vec().size() > 0; })
+      .for_each([&](auto elem) {
+        if (final_decode_input.size() >= k_) {
+          return;
+        }
+        const auto& [id, v] = elem;
+        final_decode_input.emplace(id, Slice::Combine(v.SubVec(0, r_).as_slice_vec()));
+      });
 
   return final_decoder.DecodeSlice(final_decode_input, k_, F_, slice);
+}
+
+void CodeConversionManagement::AdjustChunkDistribution(const ChunkDistribution& cd) {
+  // First, clear all exists chunks from original chunk:
+  node_2_org_chunks_.clear();
+
+  // Re-assign the original ChunkVector to each node, note that there is no need
+  // to encode the original data slice again.
+  AssignOriginalChunksToNode(cd);
+
+  // Then, clear all reserved chunks and delete all allocated memory
+  for (const auto& [node_id, chunk_vec] : node_2_reserved_chunks_) {
+    for (const auto& chunk : chunk_vec.as_vec()) {
+      // This is a parity chunk
+      if (chunk.Index1().chunk_id == -1) {
+        delete[] chunk.data();
+      }
+    }
+  }
+  node_2_reserved_chunks_.clear();
+
+  // Re-do the 2nd phase encoding
+  EncodeReservedChunksAndAssignToNode(cd);
 }
 
 };  // namespace CODE_CONVERSION_NAMESPACE

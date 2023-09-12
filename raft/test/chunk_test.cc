@@ -3,7 +3,20 @@
 #include "gtest/gtest.h"
 #include "raft_type.h"
 
-class ChunkTest : public ::testing::Test {};
+using namespace raft;
+class ChunkTest : public ::testing::Test {
+ public:
+  ChunkIndex GenerateRandomChunkIndex() { return ChunkIndex(rand() % 100, rand() % 100); }
+
+  Slice GenerateRandomSlice(size_t sz) {
+    // Add 16 so that the data can be accessed
+    auto rand_data = new char[sz];
+    for (int i = 0; i < sz; ++i) {
+      rand_data[i] = rand();
+    }
+    return Slice(rand_data, sz);
+  }
+};
 
 using namespace raft;
 using namespace CODE_CONVERSION_NAMESPACE;
@@ -110,4 +123,31 @@ TEST_F(ChunkTest, TestTwoServersFailure) {
   ASSERT_EQ(cd.GetAssignedReserveChunks(2).at(3), ChunkIndex(f2, 3));
   ASSERT_EQ(cd.GetAssignedReserveChunks(2).at(4), ChunkIndex(f2, 4));
   ASSERT_EQ(cd.GetAssignedReserveChunks(2).at(5), ChunkIndex(f2, 5));
+}
+
+TEST_F(ChunkTest, TestChunkVectorSerialization) {
+  // Construct the ChunkVector first
+  const int elem_cnt = 10;
+  ChunkVector cv;
+  for (int i = 0; i < elem_cnt; ++i) {
+    cv.AddChunk(GenerateRandomChunkIndex(), GenerateRandomChunkIndex(),
+                GenerateRandomSlice(512 * 1024));
+  }
+
+  auto s_cv = cv.Serialize();
+  ASSERT_NE(s_cv.data(), nullptr);
+  ASSERT_GE(s_cv.size(), 0);
+
+  // Deserialize the slice
+  ChunkVector d_cv;
+  auto b = d_cv.Deserialize(s_cv);
+  ASSERT_TRUE(b);
+  ASSERT_EQ(d_cv.chunks_.size(), cv.chunks_.size());
+
+  // Compare that each vector element equals
+  for (int i = 0; i < cv.as_vec().size(); ++i) {
+    ASSERT_EQ(d_cv.as_vec()[i].Index1(), cv.as_vec()[i].Index1());
+    ASSERT_EQ(d_cv.as_vec()[i].Index2(), cv.as_vec()[i].Index2());
+    ASSERT_EQ(cv.as_vec()[i].slice().compare(d_cv.as_vec()[i].slice()), 0);
+  }
 }

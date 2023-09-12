@@ -26,7 +26,7 @@ class CodeConversionManagement {
 
  public:
   CodeConversionManagement() = default;
-  CodeConversionManagement(int F, int k, int r) : F_(F), k_(k), r_(r) {}
+  CodeConversionManagement(int k, int F, int r) : k_(k), F_(F), r_(r) {}
 
   CodeConversionManagement(const CodeConversionManagement&) = delete;
   CodeConversionManagement& operator=(const CodeConversionManagement&) = delete;
@@ -37,13 +37,25 @@ class CodeConversionManagement {
 
   bool DecodeCollectedChunkVec(const std::map<raft_node_id_t, ChunkVector>& input, Slice* slice);
 
-  const auto& GetOriginalChunkVector(raft_node_id_t node_id) {
-    return node_2_org_chunks_.at(node_id);
+  void AdjustChunkDistribution(std::vector<bool>& live_vec);
+
+  auto GetOriginalChunkVector(raft_node_id_t node_id) -> ChunkVector {
+    if (node_2_org_chunks_.count(node_id)) {
+      return node_2_org_chunks_[node_id];
+    }
+    return ChunkVector();
   }
 
-  const auto& GetReservedChunkVector(raft_node_id_t node_id) {
-    return node_2_reserved_chunks_.at(node_id);
+  auto GetReservedChunkVector(raft_node_id_t node_id) -> ChunkVector {
+    if (node_2_reserved_chunks_.count(node_id)) {
+      return node_2_reserved_chunks_.at(node_id);
+    }
+    return ChunkVector();
   }
+
+  // Adjust the chunk placement according to the new ChunkDistribution. 
+  // Note that this function would clear all slice that are allocated in last round.
+  void AdjustChunkDistribution(const ChunkDistribution& cd);
 
  private:
   // Prepare the original chunks and write them into the org_chunks_ attribute
@@ -74,7 +86,7 @@ class CodeConversionManagement {
   }
 
  private:
-  int F_, k_, r_;
+  int k_, F_, r_;
   std::unordered_map<raft_node_id_t, ChunkVector> node_2_org_chunks_, node_2_reserved_chunks_;
   std::vector<Slice> org_chunks_[kMaxNodeNum];
   // A response vector indicate whether a node has received the original chunks

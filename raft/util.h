@@ -9,9 +9,9 @@
 #include <chrono>
 #include <cstdio>
 #include <fstream>
+#include <sstream>
 #include <string>
 #include <vector>
-#include <sstream>
 
 namespace raft {
 namespace util {
@@ -221,37 +221,28 @@ inline int lcm(const std::vector<int> &v) {
   return ret;
 }
 
-inline std::string ToString(const std::vector<bool>& live_vec) {
+inline std::string ToString(const std::vector<bool> &live_vec) {
   std::stringstream ss;
   ss << "[";
-  for (const auto& b : live_vec) {
+  for (const auto &b : live_vec) {
     ss << (b ? "1" : "0") << " ";
   }
   ss << "]";
   return ss.str();
 }
 
-// A simple implementation of filter
-template <typename Container, typename Predicate>
-inline Container filter(const Container &container, Predicate pred) {
-  Container ret;
-  std::copy_if(container.begin(), container.end(), std::back_inserter(ret), pred);
-  return ret;
-}
+struct LatencyGuard {
+  using CallBack = std::function<void(uint64_t)>;
+  TimePoint start_;
+  CallBack cb_;
 
-template <typename T>  // T must be integer
-struct EnumerateIterator {
-  T begin_, end_, sep_;
-
-  EnumerateIterator(T begin, T end, T sep) : begin_(begin), end_(end), sep_(sep) {}
-
-  // Run over this iterator
-  template <typename UnaryFunction>
-  void for_each(UnaryFunction act) {
-    while (begin_ < end_) {
-      act(begin_);
-      begin_ += sep_;
-    }
+  LatencyGuard(CallBack cb) : start_(NowTime()), cb_(cb) {}
+  ~LatencyGuard() {
+#define ENABLE_LATENCY_GUARD
+#ifdef ENABLE_LATENCY_GUARD
+    auto dura = DurationToMicros(start_, NowTime());
+    cb_(dura);
+#endif
   }
 };
 
