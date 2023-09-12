@@ -11,6 +11,7 @@
 #include <thread>
 #include <vector>
 
+#include "code_conversion.h"
 #include "encoder.h"
 #include "log_entry.h"
 #include "log_manager.h"
@@ -911,6 +912,23 @@ void RaftState::EncodeRaftEntry(raft_index_t raft_index, raft_encoding_param_t k
   }
 }
 
+void RaftState::CalChunkDistributionForRaftEntry(raft_index_t raft_index, int k, int r,
+                                                 const std::vector<bool> &live_vec,
+                                                 code_conversion::ChunkDistribution *cd) {
+  assert(raft_index <= lm_->LastLogEntryIndex());
+  // auto ent = lm_->GetSingleLogEntry(raft_index);
+  // assert(ent != nullptr);
+
+  // // 1. generate placement for current distribution
+  // cd->GeneratePlacement(live_vec);
+
+  // // 2. Encode the slice
+  // auto data_to_encode = ent->CommandData().data() + ent->StartOffset();
+  // auto datasize_to_encode = ent->CommandData().size() - ent->StartOffset();
+  // Slice encode_slice = Slice(data_to_encode, datasize_to_encode);
+  // cd->EncodeForPlacement(encode_slice);
+}
+
 bool RaftState::DecodingRaftEntry(Stripe *stripe, LogEntry *ent) {
   // Debug:
   // ------------------------------------------------------------------
@@ -973,6 +991,24 @@ bool RaftState::DecodingRaftEntry(Stripe *stripe, LogEntry *ent) {
   LOG(util::kRaft, "S%d Decode Results: Ent(%s)", id_, ent->ToString().c_str());
 
   return true;
+}
+
+void RaftState::ReplicateNewProposeEntryCodeConversion(raft_index_t raft_index) {
+  LOG(util::kRaft, "S%d REPLICATE NEW ENTRY CODE CONVERSION", id_);
+  auto live_vec = live_monitor_.GetLivenessVector();
+
+  // The parameter k is fixed to be N - F all the time, and the parameter m is fixed to be F
+  raft_encoding_param_t encode_k = live_vec.size() - livenessLevel();
+  raft_encoding_param_t encode_m = livenessLevel();
+
+  LOG(util::kRaft, "S%d Estimates %d Alive Servers: %s", id_, live_vec.size(),
+      util::ToString(live_vec).c_str());
+
+  auto total_chunk_num = code_conversion::get_chunk_count(encode_k);
+  auto r = total_chunk_num / encode_k;
+  auto cd = new code_conversion::ChunkDistribution(livenessLevel(), encode_k, r);
+
+  chunk_distribution_.insert_or_assign(raft_index, cd);
 }
 
 void RaftState::ReplicateNewProposeEntry(raft_index_t raft_index) {

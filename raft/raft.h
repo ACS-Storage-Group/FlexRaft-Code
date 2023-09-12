@@ -6,6 +6,7 @@
 #include <set>
 #include <unordered_map>
 
+#include "code_conversion.h"
 #include "encoder.h"
 #include "log_entry.h"
 #include "log_manager.h"
@@ -302,6 +303,10 @@ class RaftState {
   void EncodeRaftEntry(raft_index_t raft_index, raft_encoding_param_t k, raft_encoding_param_t m,
                        Stripe *stripe);
 
+  void CalChunkDistributionForRaftEntry(raft_index_t raft_index, int k, int r,
+                                        const std::vector<bool> &live_vec,
+                                        code_conversion::ChunkDistribution *cd);
+
   // Decoding all fragments contained in a stripe into a complete log entry
   bool DecodingRaftEntry(Stripe *stripe, LogEntry *ent);
 
@@ -374,8 +379,12 @@ class RaftState {
   void DecodeCollectedStripe();
 
   // Replicate a new proposed entry indexed by specified raft_index to alive
-  // servers [Require]: Given entry has already been added into log
+  // servers
+  // [Require]: Given entry has already been added into log
   void ReplicateNewProposeEntry(raft_index_t raft_index);
+
+  // Replicate a new proposed entry in the code conversion manner
+  void ReplicateNewProposeEntryCodeConversion(raft_index_t raft_index);
 
   // This process checks if re-encoding is needed for each uncommitted entry. If
   // it is, re-encoding and replicate entries to all followers; otherwise,
@@ -453,6 +462,10 @@ class RaftState {
   // For each index, there is an associated stripe that contains the encoded
   // data
   std::map<raft_index_t, Stripe *> encoded_stripe_;
+
+  // For each index, the leader records the distribution information of each chunk splitted
+  // from the entry
+  std::unordered_map<raft_index_t, code_conversion::ChunkDistribution *> chunk_distribution_;
 
   // For each index, last_encoding contains the most recent encoding parameters
   // k since it determines if there is a newer version of encoding

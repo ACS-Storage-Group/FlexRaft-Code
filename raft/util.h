@@ -11,6 +11,7 @@
 #include <fstream>
 #include <string>
 #include <vector>
+#include <sstream>
 
 namespace raft {
 namespace util {
@@ -220,33 +221,15 @@ inline int lcm(const std::vector<int> &v) {
   return ret;
 }
 
-// Some syntax sugar
-
-// template <typename Container, typename Predicate>
-// struct ContainerIterator {
-//   using Iter = decltype(std::begin(std::declval<Container &>()));
-//   using Val = decltype(*std::begin(std::declval<Container&>()));
-//   Iter begin_, end_;
-//   Predicate pred_;
-
-//   static bool AlwaysTrue(Val v) { return true; }
-
-//   ContainerIterator(Container &container, Predicate pred)
-//       : begin_(container.begin()), end_(container.end()), pred_(pred) {}
-
-//   // Run over each element that satisfies the predicate
-//   template <typename UnaryFunction>
-//   void for_each(UnaryFunction act) {
-//     while (begin_ != end_) {
-//       if (pred_(*begin_)) {
-//         act(*begin_);
-//       }
-//       begin_ = std::next(begin_);
-//     }
-//   }
-// };
-
-
+inline std::string ToString(const std::vector<bool>& live_vec) {
+  std::stringstream ss;
+  ss << "[";
+  for (const auto& b : live_vec) {
+    ss << (b ? "1" : "0") << " ";
+  }
+  ss << "]";
+  return ss.str();
+}
 
 // A simple implementation of filter
 template <typename Container, typename Predicate>
