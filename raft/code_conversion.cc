@@ -295,13 +295,19 @@ void CodeConversionManagement::EncodeForPlacement(const Slice& slice,
 
   AssignOriginalChunksToNode(cd);
   EncodeReservedChunksAndAssignToNode(cd);
+  SetLiveVecForCurrDistribution(live_vec);
 }
 
-void CodeConversionManagement::AdjustChunkDistribution(std::vector<bool>& live_vec) {
+void CodeConversionManagement::AdjustChunkDistribution(const std::vector<bool>& live_vec) {
   util::LatencyGuard guard([](uint64_t us) { printf("Adjust cost: %lu us\n", us); });
+  if (live_vec == GetLiveVecForCurrDistribution()) {
+    // No need to adjust the chunk distribution if the liveness vector has not changed
+    return;
+  }
   ChunkDistribution cd(k_, F_, r_);
   cd.GenerateChunkDistribution(live_vec);
   AdjustChunkDistribution(cd);
+  SetLiveVecForCurrDistribution(live_vec);
 }
 
 std::map<raft_node_id_t, Slice> CodeConversionManagement::RecoverReservedChunks(

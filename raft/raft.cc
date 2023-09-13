@@ -182,7 +182,7 @@ void RaftState::Process(AppendEntriesArgs *args, AppendEntriesReply *reply) {
   // Step3: Check conflicts and add new entries
   assert(args->entry_cnt == args->entries.size());
   if (args->entry_cnt > 0) {
-    checkConflictEntryAndAppendNew(args, reply);
+    CheckConflictEntryAndAppendNew(args, reply);
   }
   reply->expect_index = args->prev_log_index + args->entry_cnt + 1;
   LOG(util::kRaft, "S%d reply with expect index=%d", id_, reply->expect_index);
@@ -195,6 +195,80 @@ void RaftState::Process(AppendEntriesArgs *args, AppendEntriesReply *reply) {
     SetCommitIndex(std::min(update_commit_idx, lm_->LastLogEntryIndex()));
 
     LOG(util::kRaft, "S%d Update CommitIndex (%d->%d)", id_, old_commit_idx, CommitIndex());
+  }
+
+  // TODO: Notify applier thread to apply newly committed entries to state
+  // machine
+
+  reply->term = CurrentTerm();
+  reply->success = true;
+
+  // Commit index might have been changed, try apply committed entries
+  tryApplyLogEntries();
+
+  return;
+}
+
+void RaftState::ProcessCodeConversion(AppendEntriesArgs *args, AppendEntriesReply *reply) {
+  assert(args != nullptr && reply != nullptr);
+  live_monitor_.UpdateLiveness(args->leader_id);
+
+  std::scoped_lock<std::mutex> lck(mtx_);
+
+  LOG(util::kRaft,
+      "[CC] S%d Receive AppendEntries From S%d(EC) (T%d PI=%d PT=%d PK=%d EntCnt=%d "
+      "LCommit=%d)",
+      id_, args->leader_id, args->term, args->prev_log_index, args->prev_log_term, args->prev_k,
+      args->entries.size(), args->leader_commit);
+
+  reply->reply_id = id_;
+  reply->chunk_info_cnt = 0;
+
+  // Reply false immediately if arguments' term is smaller
+  if (args->term < CurrentTerm()) {
+    reply->success = false;
+    reply->term = CurrentTerm();
+    reply->expect_index = 0;
+    LOG(util::kRaft, "[CC] S%d reply to S%d with T%d EI%d", id_, args->leader_id, reply->term,
+        reply->expect_index);
+    return;
+  }
+
+  if (args->term > CurrentTerm() || Role() == kCandidate) {
+    convertToFollower(args->term);
+  }
+  resetElectionTimer();
+
+  // Step2: Check if current server contains a log entry at prev log index with
+  // prev log term
+  if (!containEntry(args->prev_log_index, args->prev_log_term, args->prev_k)) {
+    // Reply false immediately since current server lacks one log entry: notify
+    // the leader to send older entries
+    reply->success = false;
+    reply->term = CurrentTerm();
+    // The check failes, the leader should send more "previous" entries
+    // reply->expect_index = args->prev_log_index;
+    reply->expect_index = std::min(lm_->LastLogEntryIndex() + 1, args->prev_log_index);
+    LOG(util::kRaft, "[CC] S%d reply with expect index=%d", id_, reply->expect_index);
+    return;
+  }
+
+  // Step3: Check conflicts and add new entries
+  assert(args->entry_cnt == args->entries.size());
+  if (args->entry_cnt > 0) {
+    CheckConflictEntryAndAppendNewCodeConversion(args, reply);
+  }
+  reply->expect_index = args->prev_log_index + args->entry_cnt + 1;
+  LOG(util::kRaft, "[CC] S%d reply with expect index=%d", id_, reply->expect_index);
+
+  // Step4: Update commit index if necessary
+  if (args->leader_commit > CommitIndex()) {
+    auto old_commit_idx = CommitIndex();
+    raft_index_t new_entry_idx = args->prev_log_index + args->entries.size();
+    auto update_commit_idx = std::min(args->leader_commit, new_entry_idx);
+    SetCommitIndex(std::min(update_commit_idx, lm_->LastLogEntryIndex()));
+
+    LOG(util::kRaft, "[CC] S%d Update CommitIndex (%d->%d)", id_, old_commit_idx, CommitIndex());
   }
 
   // TODO: Notify applier thread to apply newly committed entries to state
@@ -453,7 +527,7 @@ bool RaftState::isLogUpToDate(raft_index_t raft_index, raft_term_t raft_term) {
   return false;
 }
 
-void RaftState::checkConflictEntryAndAppendNew(AppendEntriesArgs *args, AppendEntriesReply *reply) {
+void RaftState::CheckConflictEntryAndAppendNew(AppendEntriesArgs *args, AppendEntriesReply *reply) {
   assert(args->entry_cnt == args->entries.size());
   auto old_idx = lm_->LastLogEntryIndex();
   auto array_index = 0;
@@ -535,6 +609,92 @@ void RaftState::checkConflictEntryAndAppendNew(AppendEntriesArgs *args, AppendEn
   if (storage_ != nullptr) {
     storage_->Sync();
   }
+}
+
+void RaftState::CheckConflictEntryAndAppendNewCodeConversion(AppendEntriesArgs *args,
+                                                             AppendEntriesReply *reply) {
+  assert(args->entry_cnt == args->entries.size());
+  auto old_idx = lm_->LastLogEntryIndex();
+  auto array_index = 0;
+
+  for (; array_index < args->entries.size(); ++array_index) {
+    auto raft_index = array_index + args->prev_log_index + 1;
+    if (raft_index > lm_->LastLogEntryIndex()) {
+      break;
+    }
+    if (args->entries[array_index].Term() != lm_->TermAt(raft_index)) {
+      auto old_last_index = lm_->LastLogEntryIndex();
+      lm_->DeleteLogEntriesFrom(raft_index);
+      reserve_lm_->DeleteLogEntriesFrom(raft_index);
+
+      if (storage_ != nullptr) storage_->DeleteEntriesFrom(raft_index);
+      if (reserve_storage_ != nullptr) reserve_storage_->DeleteEntriesFrom(raft_index);
+
+      LOG(util::kRaft, "[CC] S%d Delete Entry (%d->%d)", id_, old_last_index,
+          lm_->LastLogEntryIndex());
+      break;
+    }
+
+    bool do_overwrite = false;
+
+    // Check if we need to overwrite this entry, note that all these entries are
+    // aligned with (index, term)
+    auto ent = lm_->GetSingleLogEntry(raft_index);
+    // Since this entry passes the test for [raft_index, raft_term], it is supposed to contain the
+    // original chunks, so we only need to overwrite the reserved chunks
+    assert(ent->GetOriginalChunkVector().size() > 0);
+    if (NeedOverwriteLogEntry(ent->GetChunkInfo(), args->entries[array_index].GetChunkInfo())) {
+      // We only need to overwrite the reserved chunks for these entries:
+      auto reserve_entry = args->entries[array_index];
+      reserve_entry.OriginalChunkVectorRef().clear();
+      reserve_lm_->OverWriteLogEntry(reserve_entry, raft_index);
+      if (!do_overwrite) {
+        if (reserve_storage_) reserve_storage_->OverwriteEntry(raft_index, reserve_entry);
+        do_overwrite = true;
+      } else {
+        if (reserve_storage_) reserve_storage_->AppendEntry(reserve_entry);
+      }
+      LOG(util::kRaft, "[CC] S%d OVERWRITE I%d ConflictIndex=I%d", id_, raft_index, raft_index);
+    } else {
+    }
+
+    // [TODO]: The reply struct needs redesign
+
+    // ent = lm_->GetSingleLogEntry(raft_index);
+    // reply->chunk_infos.push_back(ent->GetChunkInfo());
+    // LOG(util::kRaft, "S%d REPLY (I%d T%d ChunkInfo(%s))", id_, raft_index, ent->Term(),
+    //     ent->GetChunkInfo().ToString().c_str());
+  }
+  // For those new entries, add both original ChunkVector and reserved ChunkVector
+  auto old_last_index = lm_->LastLogEntryIndex();
+  for (auto i = array_index; i < args->entries.size(); ++i) {
+    auto raft_index = args->prev_log_index + i + 1;
+    LogEntry org_entry = args->entries[i], reserve_entry = args->entries[i];
+
+    org_entry.ReservedChunkVectorRef().clear();
+    reserve_entry.OriginalChunkVectorRef().clear();
+
+    lm_->AppendLogEntry(org_entry);
+    reserve_lm_->AppendLogEntry(reserve_entry);
+
+    if (storage_) storage_->AppendEntry(org_entry);
+    if (reserve_storage_) reserve_storage_->AppendEntry(reserve_entry);
+
+    auto reply_chunk_info = args->entries[i].GetChunkInfo();
+    LOG(util::kRaft, "[CC] S%d APPEND I%d OrgChunks(%d) ReserveChunks(%d)", id_, raft_index,
+        org_entry.GetOriginalChunkVector().size(), reserve_entry.GetOriginalChunkVector().size());
+    reply->chunk_infos.push_back(reply_chunk_info);
+  }
+
+  LOG(util::kRaft, "[CC] S%d APPEND(%d->%d) ENTCNT=%d", id_, old_last_index,
+      lm_->LastLogEntryIndex(), args->entries.size());
+
+  reply->chunk_info_cnt = reply->chunk_infos.size();
+
+  if (storage_) storage_->Sync();
+  if (reserve_storage_) reserve_storage_->Sync();
+
+  assert(lm_->LastLogEntryIndex() == reserve_lm_->LastLogEntryIndex());
 }
 
 void RaftState::tryUpdateCommitIndex() {
@@ -926,12 +1086,13 @@ void RaftState::EncodeRaftEntryForCodeConversion(
   stripe->raft_term = ent->Term();
   stripe->fragments.clear();
 
-  LOG(util::kRaft, "S%d Encode I%d T%d, Live: %s", id_, raft_index, stripe->raft_term,
+  LOG(util::kRaft, "[CC] S%d Encode I%d T%d, Live: %s", id_, raft_index, stripe->raft_term,
       util::ToString(live_vec).c_str());
   auto slice = Slice(ent->CommandData().data() + ent->StartOffset(),
                      ent->CommandData().size() - ent->StartOffset());
   ccm->EncodeForPlacement(slice, live_vec);
 
+  // For compatability, we still write the full LogEntry into the Stripe struct
   for (int i = 0; i < live_vec.size(); ++i) {
     LogEntry encoded_ent;
     encoded_ent.SetIndex(raft_index);
@@ -944,30 +1105,31 @@ void RaftState::EncodeRaftEntryForCodeConversion(
     encoded_ent.SetNotEncodedSlice(Slice(ent->CommandData().data(), ent->StartOffset()));
     encoded_ent.SetFragmentSlice(Slice(nullptr, 0));
 
-    // Set the chunk vector
-    auto cv = ccm->GetOriginalChunkVector(i);
-    cv.Concatenate(ccm->GetReservedChunkVector(i));
-    encoded_ent.SetChunkVector(cv);
+    // Set the ChunkVector and Stripe
+    encoded_ent.SetOriginalChunkVector(ccm->GetOriginalChunkVector(i));
+    encoded_ent.SetReservedChunkVector(ccm->GetReservedChunkVector(i));
 
     stripe->fragments[i] = encoded_ent;
   }
 }
 
-void RaftState::CalChunkDistributionForRaftEntry(raft_index_t raft_index, int k, int r,
-                                                 const std::vector<bool> &live_vec,
-                                                 code_conversion::ChunkDistribution *cd) {
-  assert(raft_index <= lm_->LastLogEntryIndex());
-  // auto ent = lm_->GetSingleLogEntry(raft_index);
-  // assert(ent != nullptr);
+void RaftState::AdjustChunkDistributionCodeConversion(raft_index_t raft_index,
+                                                      const std::vector<bool> &live_vec) {
+  LOG(util::kRaft, "S%d Adjust ChunkDistributionForCodeConversion: %s", id_,
+      util::ToString(live_vec).c_str());
 
-  // // 1. generate placement for current distribution
-  // cd->GeneratePlacement(live_vec);
+  auto ccm = cc_managment_[raft_index];
+  auto stripe = encoded_stripe_[raft_index];
 
-  // // 2. Encode the slice
-  // auto data_to_encode = ent->CommandData().data() + ent->StartOffset();
-  // auto datasize_to_encode = ent->CommandData().size() - ent->StartOffset();
-  // Slice encode_slice = Slice(data_to_encode, datasize_to_encode);
-  // cd->EncodeForPlacement(encode_slice);
+  assert(ccm != nullptr);
+  assert(stripe != nullptr);
+
+  ccm->AdjustChunkDistribution(live_vec);
+
+  for (int i = 0; i < live_vec.size(); ++i) {
+    stripe->fragments[i].SetOriginalChunkVector(ccm->GetOriginalChunkVector(i));
+    stripe->fragments[i].SetReservedChunkVector(ccm->GetReservedChunkVector(i));
+  }
 }
 
 bool RaftState::DecodingRaftEntry(Stripe *stripe, LogEntry *ent) {
@@ -1035,20 +1197,29 @@ bool RaftState::DecodingRaftEntry(Stripe *stripe, LogEntry *ent) {
 }
 
 void RaftState::ReplicateNewProposeEntryCodeConversion(raft_index_t raft_index) {
-  LOG(util::kRaft, "S%d REPLICATE NEW ENTRY CODE CONVERSION", id_);
+  LOG(util::kRaft, "[CC] S%d REPLICATE NEW ENTRY CODE CONVERSION", id_);
   auto live_vec = live_monitor_.GetLivenessVector();
 
   // The parameter k is fixed to be N - F all the time, and the parameter m is fixed to be F
   raft_encoding_param_t encode_k = live_vec.size() - livenessLevel();
   raft_encoding_param_t encode_m = livenessLevel();
 
-  LOG(util::kRaft, "S%d Estimates %d Alive Servers: %s", id_, live_vec.size(),
+  LOG(util::kRaft, "[CC] S%d Estimates %d Alive Servers: %s", id_, live_vec.size(),
       util::ToString(live_vec).c_str());
 
   auto total_chunk_num = CODE_CONVERSION_NAMESPACE::get_chunk_count(encode_k);
   auto r = total_chunk_num / encode_k;
   auto ccm = new CODE_CONVERSION_NAMESPACE::CodeConversionManagement(encode_k, livenessLevel(), r);
+  auto stripe = new Stripe();
+
+  // Do the Encoding according to the liveness vector
+  EncodeRaftEntryForCodeConversion(raft_index, live_vec, ccm, stripe);
+
+  // Record the encoded data
+  encoded_stripe_.insert_or_assign(raft_index, stripe);
   cc_managment_.insert_or_assign(raft_index, ccm);
+
+  MaybeAdjustDistributionAndReplicate(live_vec);
 }
 
 void RaftState::ReplicateNewProposeEntry(raft_index_t raft_index) {
@@ -1162,6 +1333,31 @@ void RaftState::MaybeReEncodingAndReplicate() {
       LOG(util::kRaft, "S%d REVERSE S%d NI To %d", id_, peer_id, CommitIndex() + 1);
       if (live_monitor_.IsAlive(peer_id)) {
         sendAppendEntries(peer_id);
+      } else {
+        sendHeartBeat(peer_id);
+      }
+    }
+  }
+}
+
+void RaftState::MaybeAdjustDistributionAndReplicate(const std::vector<bool> &live_vec) {
+  LOG(util::kRaft, "S%d ADJUST CHUNK DISTRIBUTION", id_);
+
+  // For each uncommitted entry, adjust their Chunk storage distribution
+  auto last_index = lm_->LastLogEntryIndex();
+  for (auto raft_index = CommitIndex() + 1; raft_index <= last_index; ++raft_index) {
+    AdjustChunkDistributionCodeConversion(raft_index, live_vec);
+  }
+
+  // Step2: replicate all uncommitted entries by reversing NextIndex and MatchIndex
+  for (auto peer_id : peers_) {
+    if (peer_id != id_) {
+      auto peer = raft_peer_[peer_id];
+      peer->SetNextIndex(CommitIndex() + 1);
+      peer->SetMatchIndex(CommitIndex());
+      LOG(util::kRaft, "[CC] S%d REVERSE S%d NI To %d", id_, peer_id, peer->NextIndex());
+      if (live_monitor_.IsAlive(peer_id)) {
+        sendAppendEntriesCodeConversion(peer_id);
       } else {
         sendHeartBeat(peer_id);
       }
@@ -1327,6 +1523,36 @@ void RaftState::sendAppendEntries(raft_node_id_t peer) {
   assert(require_entry_cnt == args.entries.size());
   args.entry_cnt = args.entries.size();
 
+  rpc_clients_[peer]->sendMessage(args);
+}
+
+void RaftState::sendAppendEntriesCodeConversion(raft_node_id_t peer) {
+  LOG(util::kRaft, "[CC] S%d sendAppendEntriesCodeConversion To S%d", id_, peer);
+  auto next_index = raft_peer_[peer]->NextIndex();
+  auto prev_index = next_index - 1;
+  auto prev_term = lm_->TermAt(prev_index);
+  auto prev_k = GetLastEncodingK(prev_index);
+
+  auto args = AppendEntriesArgs{CurrentTerm(), id_, prev_index, prev_term, prev_k, CommitIndex()};
+
+  auto require_entry_cnt = lm_->LastLogEntryIndex() - prev_index;
+  args.entries.reserve(require_entry_cnt);
+
+  for (auto raft_index = next_index; raft_index < lm_->LastLogEntryIndex(); ++raft_index) {
+    args.entries.push_back(encoded_stripe_[raft_index]->fragments[peer]);
+    auto ccm = cc_managment_[raft_index];
+    // Avoid resending original chunks if these chunks have been replicated for last round
+    if (ccm->HasReceivedOrgChunk(peer)) {
+      args.entries.end()->OriginalChunkVectorRef().clear();
+      LOG(util::kRaft, "[CC] S%d AE To S%d(REMOVE Org Chunk At I%d) at T%d", id_, peer, raft_index,
+          CurrentTerm());
+    }
+  }
+
+  LOG(util::kRaft, "S%d AE To S%d (I%d->I%d) at T%d", id_, peer, next_index,
+      lm_->LastLogEntryIndex(), CurrentTerm());
+  assert(require_entry_cnt == args.entries.size());
+  args.entry_cnt = args.entries.size();
   rpc_clients_[peer]->sendMessage(args);
 }
 

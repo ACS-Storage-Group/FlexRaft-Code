@@ -30,7 +30,7 @@ size_t ChunkVector::HeaderSizeForSerialization() const {
   return hdr_sz;
 }
 
-char* ChunkVector::Serialize(char* d) {
+char* ChunkVector::Serialize(char* d) const {
   // Serialize the data
   int h_offset = sizeof(uint32_t), d_offset = HeaderSizeForSerialization();
   for (const auto& chunk : chunks_) {
@@ -55,7 +55,7 @@ char* ChunkVector::Serialize(char* d) {
   return d + d_offset;
 }
 
-Slice ChunkVector::Serialize() {
+Slice ChunkVector::Serialize() const {
   auto alloc_sz = SizeForSerialization();
   auto hdr_sz = HeaderSizeForSerialization();
 
@@ -72,14 +72,15 @@ bool ChunkVector::Deserialize(const Slice& s) {
 }
 
 const char* ChunkVector::Deserialize(const char* s) {
-  this->chunks_.clear();
+  clear();
 
   // Firstly, get the number of chunk within this slice
   auto d = s;
   uint32_t chunk_count = *(uint32_t*)d;
 
   uint32_t h_off = sizeof(uint32_t);
-  uint32_t d_off, sz;
+  auto hdr_sz_for_each = sizeof(ChunkIndex) * 2 + sizeof(uint32_t) * 2;
+  uint32_t d_off = chunk_count * hdr_sz_for_each + sizeof(uint32_t), sz = 0;
   for (uint32_t i = 0; i < chunk_count; ++i) {
     ChunkIndex idx1, idx2;
     const char* tmp = idx1.Deserialize(d + h_off);

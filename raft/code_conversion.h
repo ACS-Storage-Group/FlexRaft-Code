@@ -36,7 +36,10 @@ class CodeConversionManagement {
 
   bool DecodeCollectedChunkVec(const std::map<raft_node_id_t, ChunkVector>& input, Slice* slice);
 
-  void AdjustChunkDistribution(std::vector<bool>& live_vec);
+  void AdjustChunkDistribution(const std::vector<bool>& live_vec);
+
+  const auto& GetLiveVecForCurrDistribution() const { return live_vec_; }
+  void SetLiveVecForCurrDistribution(const std::vector<bool>& live_vec) { live_vec_ = live_vec; }
 
   auto GetOriginalChunkVector(raft_node_id_t node_id) -> ChunkVector {
     if (node_2_org_chunks_.count(node_id)) {
@@ -52,10 +55,6 @@ class CodeConversionManagement {
     return ChunkVector();
   }
 
-  // Adjust the chunk placement according to the new ChunkDistribution.
-  // Note that this function would clear all slice that are allocated in last round.
-  void AdjustChunkDistribution(const ChunkDistribution& cd);
-
   // If an original chunk corresponded to a specific node has been received by this node,
   // set the corresponding vector bit to be true.
   void UpdateOrgChunkResponseInfo(raft_node_id_t node_id);
@@ -66,6 +65,10 @@ class CodeConversionManagement {
   }
 
  private:
+  // Adjust the chunk placement according to the new ChunkDistribution.
+  // Note that this function would clear all slice that are allocated in last round.
+  void AdjustChunkDistribution(const ChunkDistribution& cd);
+
   // Prepare the original chunks and write them into the org_chunks_ attribute
   void PrepareOriginalChunks(const Slice& slice);
 
@@ -100,6 +103,9 @@ class CodeConversionManagement {
   std::vector<Slice> org_chunks_[kMaxNodeNum];
   // A response vector indicate whether a node has received the original chunks
   bool org_chunk_response_[kMaxNodeNum] = {false};
+
+  // The liveness vector when generating chunk distribution or adjusting
+  std::vector<bool> live_vec_;
 };
 };  // namespace CODE_CONVERSION_NAMESPACE
 

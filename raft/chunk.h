@@ -113,10 +113,10 @@ struct ChunkVector {
   void AddChunk(ChunkIndex idx1, ChunkIndex idx2, Slice s) { chunks_.emplace_back(idx1, idx2, s); }
 
   // Serialize this ChunkVector to a slice and return the data
-  Slice Serialize();
+  Slice Serialize() const;
 
   // Serialize the size to a start address and return the last position after serialization
-  char* Serialize(char* d);
+  char* Serialize(char* d) const;
 
   // Return the size needed for serializing this ChunkVector
   size_t SizeForSerialization() const;
@@ -159,6 +159,16 @@ struct ChunkVector {
       ret.emplace_back(c.slice());
     }
     return ret;
+  }
+
+  void clear() { chunks_.clear(); }
+
+  bool operator==(const ChunkVector& rhs) const {
+    return this->chunks_ == rhs.chunks_;
+  }
+
+  bool operator!=(const ChunkVector& rhs) const {
+    return !operator==(rhs);
   }
 };
 

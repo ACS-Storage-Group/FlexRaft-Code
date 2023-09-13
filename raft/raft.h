@@ -235,6 +235,8 @@ class RaftState {
   void Process(AppendEntriesArgs *args, AppendEntriesReply *reply);
   void Process(AppendEntriesReply *reply);
 
+  void ProcessCodeConversion(AppendEntriesArgs *args, AppendEntriesReply *reply);
+
   void Process(RequestFragmentsArgs *args, RequestFragmentsReply *reply);
   void Process(RequestFragmentsReply *reply);
 
@@ -307,10 +309,9 @@ class RaftState {
   void EncodeRaftEntryForCodeConversion(raft_index_t raft_index, const std::vector<bool> &live_vec,
                                         CODE_CONVERSION_NAMESPACE::CodeConversionManagement *ccm,
                                         Stripe *stripe);
-
-  void CalChunkDistributionForRaftEntry(raft_index_t raft_index, int k, int r,
-                                        const std::vector<bool> &live_vec,
-                                        code_conversion::ChunkDistribution *cd);
+  // Adjust the Chunk distribution for a single entry at specific index position
+  void AdjustChunkDistributionCodeConversion(raft_index_t raft_index,
+                                             const std::vector<bool> &live_vec);
 
   // Decoding all fragments contained in a stripe into a complete log entry
   bool DecodingRaftEntry(Stripe *stripe, LogEntry *ent);
@@ -324,7 +325,11 @@ class RaftState {
   // Iterate through the entries carried by input args and check if there is
   // conflicting entry: Same index but different term. If there is one, delete
   // all following entries. Add any new entries that are not in raft's log
-  void checkConflictEntryAndAppendNew(AppendEntriesArgs *args, AppendEntriesReply *reply);
+  void CheckConflictEntryAndAppendNew(AppendEntriesArgs *args, AppendEntriesReply *reply);
+
+  // A specialized version (for CodeConversion) of CheckConflictAndAppendNew
+  void CheckConflictEntryAndAppendNewCodeConversion(AppendEntriesArgs *args,
+                                                    AppendEntriesReply *reply);
 
   // Reset the next index and match index fields when current server becomes
   // leader
@@ -371,6 +376,9 @@ class RaftState {
   // Send appendEntries messages to target raft peer
   void sendAppendEntries(raft_node_id_t peer);
 
+  // Send appendEntries specialized for code conversion feature
+  void sendAppendEntriesCodeConversion(raft_node_id_t peer);
+
   void initLivenessMonitorState() { live_monitor_.Init(); }
 
   // In flexibleK, the leader needs to send AppendEntries arguments in every
@@ -399,6 +407,9 @@ class RaftState {
   // Some re-encoding work might by needed due to number of alive servers has
   // been changed.
   void MaybeReEncodingAndReplicate();
+
+  // The uncommitted entries may need to adjust their chunk distribution accordingly
+  void MaybeAdjustDistributionAndReplicate(const std::vector<bool> &live_vec);
 
   void UpdateLastEncodingK(raft_index_t raft_index, raft_encoding_param_t k) {
     last_encoding_.insert_or_assign(raft_index, k);
@@ -460,6 +471,10 @@ class RaftState {
   LogManager *lm_;
   Storage *storage_;
 
+  // LogManager and storage interface for reservation chunks
+  LogManager *reserve_lm_;
+  Storage *reserve_storage_;
+
   // For FlexibleK and CRaft: We need to detect the number of live servers
   LivenessMonitor live_monitor_;
   Encoder encoder_;
@@ -470,7 +485,8 @@ class RaftState {
 
   // For each index, the leader records the distribution information of each chunk splitted
   // from the entry
-  std::unordered_map<raft_index_t, code_conversion::CodeConversionManagement *> cc_managment_;
+  std::unordered_map<raft_index_t, CODE_CONVERSION_NAMESPACE::CodeConversionManagement *>
+      cc_managment_;
 
   // For each index, last_encoding contains the most recent encoding parameters
   // k since it determines if there is a newer version of encoding

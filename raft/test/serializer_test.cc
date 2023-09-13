@@ -132,8 +132,10 @@ class SerializerTest : public ::testing::Test {
           ent.SetCommandData(GenerateRandomSlice(kMaxDataSize / 2, kMaxDataSize));
           break;
         case raft::kFragments: {
-          ent.ChunkVectorRef().AddChunk(ChunkIndex(0, 0), ChunkIndex(1, 1),
-                                        GenerateRandomSlice(1024, 1024 + 1));
+          ent.OriginalChunkVectorRef().AddChunk(ChunkIndex(0, 0), ChunkIndex(1, 1),
+                                                GenerateRandomSlice(1024, 1024 + 1));
+          ent.ReservedChunkVectorRef().AddChunk(ChunkIndex(0, 0), ChunkIndex(1, 1),
+                                                GenerateRandomSlice(1024, 1025));
           break;
         }
         case raft::kTypeMax:
@@ -174,6 +176,16 @@ void SerializerTest::LocalTestFragmentDataLogEntry() {
 
   // Deserialize:
   LogEntry de_ent;
+  serializer.Deserialize(&buf, &de_ent);
+
+  ASSERT_EQ(ent, de_ent);
+
+  // Test another case where there is only reserved data
+  ent.OriginalChunkVectorRef().clear();
+  buf = RCF::ByteBuffer(serializer.getSerializeSize(ent));
+  serializer.Serialize(&ent, &buf);
+
+  // Deserialize:
   serializer.Deserialize(&buf, &de_ent);
 
   ASSERT_EQ(ent, de_ent);
@@ -374,7 +386,6 @@ TEST_F(SerializerTest, TestSerializeAsync) {
   TestSerializeRequestFragmentsReply(true);
 }
 
-TEST_F(SerializerTest, DISABLED_TestLocally) { LocalTestFragmentDataLogEntry(); }
+TEST_F(SerializerTest, TestLocally) { LocalTestFragmentDataLogEntry(); }
 
-}  // namespace raft
-   //
+};  // namespace raft

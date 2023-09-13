@@ -54,9 +54,17 @@ class LogEntry {
   auto FragmentSlice() const -> Slice { return Type() == kNormal ? Slice() : fragment_slice_; }
   void SetFragmentSlice(const Slice &slice) { fragment_slice_ = slice; }
 
-  void SetChunkVector(const CODE_CONVERSION_NAMESPACE::ChunkVector &cv) { fragment_cv_ = cv; }
-  auto ChunkVector() const -> CODE_CONVERSION_NAMESPACE::ChunkVector { return fragment_cv_; }
-  auto& ChunkVectorRef() { return fragment_cv_; }
+  void SetOriginalChunkVector(const CODE_CONVERSION_NAMESPACE::ChunkVector &cv) { org_cv_ = cv; }
+  auto GetOriginalChunkVector() const -> const CODE_CONVERSION_NAMESPACE::ChunkVector& { return org_cv_; }
+  auto &OriginalChunkVectorRef() { return org_cv_; }
+
+  void SetReservedChunkVector(const CODE_CONVERSION_NAMESPACE::ChunkVector &cv) {
+    reserved_cv_ = cv;
+  }
+  auto GetReservedChunkVector() const -> CODE_CONVERSION_NAMESPACE::ChunkVector {
+    return reserved_cv_;
+  }
+  auto &ReservedChunkVectorRef() { return reserved_cv_; }
 
   // Serialization function required by RCF
   // void serialize(SF::Archive &ar);
@@ -92,8 +100,10 @@ class LogEntry {
   Slice fragment_slice_;     // Fragments of encoded data
 
   // For compatability concern, we do not remove the fragment_slice_ attribute.
-  // Instead, we add an additional attribute
-  CODE_CONVERSION_NAMESPACE::ChunkVector fragment_cv_;
+  // Instead, we add two additional attributes to differentiate the original ChunkVector and
+  // Reserved ChunkVector
+  CODE_CONVERSION_NAMESPACE::ChunkVector org_cv_;
+  CODE_CONVERSION_NAMESPACE::ChunkVector reserved_cv_;
 };
 
 auto operator==(const LogEntry &lhs, const LogEntry &rhs) -> bool;
