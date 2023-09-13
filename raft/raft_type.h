@@ -119,6 +119,7 @@ inline const char *EntryTypeToString(const raft_entry_type &type) {
 struct ChunkInfo {
   raft_encoding_param_t k;
   raft_index_t raft_index;
+  bool contain_original;  // Indicate if the original part of this chunk has been stored
 
   auto GetK() const -> raft_encoding_param_t { return this->k; }
   void SetK(int k) { this->k = k; }
@@ -128,7 +129,7 @@ struct ChunkInfo {
 
   std::string ToString() const {
     char buf[256];
-    sprintf(buf, "ChunkInfo{k=%d, index=%d}", GetK(), GetRaftIndex());
+    sprintf(buf, "ChunkInfo{k=%d, index=%d, contain=%d}", GetK(), GetRaftIndex(), contain_original);
     return std::string(buf);
   }
 

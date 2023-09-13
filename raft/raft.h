@@ -236,6 +236,7 @@ class RaftState {
   void Process(AppendEntriesReply *reply);
 
   void ProcessCodeConversion(AppendEntriesArgs *args, AppendEntriesReply *reply);
+  void ProcessCodeConversion(AppendEntriesReply* reply);
 
   void Process(RequestFragmentsArgs *args, RequestFragmentsReply *reply);
   void Process(RequestFragmentsReply *reply);

@@ -350,6 +350,76 @@ void RaftState::Process(AppendEntriesReply *reply) {
   return;
 }
 
+void RaftState::ProcessCodeConversion(AppendEntriesReply *reply) {
+  assert(reply != nullptr);
+
+  // Note: Liveness monitor must be processed without exclusive access
+  live_monitor_.UpdateLiveness(reply->reply_id);
+
+  std::scoped_lock<std::mutex> lck(mtx_);
+
+  LOG(util::kRaft, "[CC] S%d RECV AE RESP From S%d (Accept%d Expect I%d Term %d)", id_,
+      reply->reply_id, reply->success, reply->expect_index, reply->term);
+
+  // Check if this reply is expired
+  if (Role() != kLeader || reply->term < CurrentTerm()) {
+    return;
+  }
+
+  if (reply->term > CurrentTerm()) {
+    convertToFollower(reply->term);
+    return;
+  }
+
+  auto peer_id = reply->reply_id;
+  auto node = raft_peer_[peer_id];
+  if (reply->success) {  // Requested entries are successfully replicated
+    // Update nextIndex and matchIndex for this server
+    auto update_nextIndex = reply->expect_index;
+    auto update_matchIndex = update_nextIndex - 1;
+
+    if (node->NextIndex() < update_nextIndex) {
+      node->SetNextIndex(update_nextIndex);
+      LOG(util::kRaft, "[CC] S%d update peer S%d NI%d", id_, peer_id, node->NextIndex());
+    }
+
+    if (node->MatchIndex() < update_matchIndex) {
+      node->SetMatchIndex(update_matchIndex);
+      LOG(util::kRaft, "[CC] S%d update peer S%d MI%d", id_, peer_id, node->MatchIndex());
+    }
+
+    // TODO[Code Conversion]: !!!! We need a modification to the part of judging if an entry can be
+    // committed !!!!
+    for (const auto &ci : reply->chunk_infos) {
+      auto raft_index = ci.GetRaftIndex();
+      if (node->matchChunkInfo.count(raft_index) == 0 ||
+          ci.GetK() < node->matchChunkInfo[raft_index].GetK()) {
+        node->matchChunkInfo[raft_index] = ci;
+
+        // Debug:
+        // -----------------------------------------------------------------
+        LOG(util::kRaft, "[CC] S%d Update S%d MATCH ChunkInfo: %s", id_, peer_id,
+            ci.ToString().c_str());
+        // -----------------------------------------------------------------
+      }
+    }
+    tryUpdateCommitIndex();
+  } else {
+    // NOTE: Simply set NextIndex to be expect_index might be error since the
+    // message comes from reply might not be meaningful message Update nextIndex
+    // to be expect index reply->expect_index = 0 means when receiving this AE
+    // args, the server has higher term, thus this expect_index is of no means
+    if (reply->expect_index != 0) {
+      node->SetNextIndex(reply->expect_index);
+      LOG(util::kRaft, "[CC] S%d Update S%d NI%d", id_, peer_id, node->NextIndex());
+    }
+  }
+
+  // TODO: May require applier to apply this log entry
+  tryApplyLogEntries();
+  return;
+}
+
 void RaftState::Process(RequestVoteReply *reply) {
   assert(reply != nullptr);
 
@@ -502,7 +572,9 @@ ProposeResult RaftState::Propose(const CommandData &command) {
 
   // Replicate this entry to each of followers
   // replicateEntries();
-  ReplicateNewProposeEntry(entry.Index());
+  // ReplicateNewProposeEntry(entry.Index());
+  /// !!!! For Code Conversion: Use the Replication scheme of Code Version !!!!
+  ReplicateNewProposeEntryCodeConversion(entry.Index());
 
   if (storage_ != nullptr) {
     LOG(util::kRaft, "S%d Starts Persisting Propose Entry(I%d)", id_, entry.Index());
@@ -657,13 +729,12 @@ void RaftState::CheckConflictEntryAndAppendNewCodeConversion(AppendEntriesArgs *
       LOG(util::kRaft, "[CC] S%d OVERWRITE I%d ConflictIndex=I%d", id_, raft_index, raft_index);
     } else {
     }
-
-    // [TODO]: The reply struct needs redesign
-
-    // ent = lm_->GetSingleLogEntry(raft_index);
-    // reply->chunk_infos.push_back(ent->GetChunkInfo());
-    // LOG(util::kRaft, "S%d REPLY (I%d T%d ChunkInfo(%s))", id_, raft_index, ent->Term(),
-    //     ent->GetChunkInfo().ToString().c_str());
+    ent = lm_->GetSingleLogEntry(raft_index);
+    assert(ent->GetOriginalChunkVector().size() > 0);
+    reply->chunk_infos.push_back(
+        ChunkInfo{ent->GetChunkInfo().GetRaftIndex(), ent->GetChunkInfo().GetK(), true});
+    LOG(util::kRaft, "S%d REPLY (I%d T%d ChunkInfo(%s))", id_, raft_index, ent->Term(),
+        ent->GetChunkInfo().ToString().c_str());
   }
   // For those new entries, add both original ChunkVector and reserved ChunkVector
   auto old_last_index = lm_->LastLogEntryIndex();
@@ -681,6 +752,7 @@ void RaftState::CheckConflictEntryAndAppendNewCodeConversion(AppendEntriesArgs *
     if (reserve_storage_) reserve_storage_->AppendEntry(reserve_entry);
 
     auto reply_chunk_info = args->entries[i].GetChunkInfo();
+    reply_chunk_info.contain_original = true;
     LOG(util::kRaft, "[CC] S%d APPEND I%d OrgChunks(%d) ReserveChunks(%d)", id_, raft_index,
         org_entry.GetOriginalChunkVector().size(), reserve_entry.GetOriginalChunkVector().size());
     reply->chunk_infos.push_back(reply_chunk_info);
