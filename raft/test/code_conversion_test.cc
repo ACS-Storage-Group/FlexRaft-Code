@@ -44,6 +44,9 @@ class CodeConversionManagementTest : public ::testing::Test {
     CodeConversionManagement ccm(TestK, TestF, r);
     // Generate a random slice
     auto slice = GenerateSliceOfRandomSize(512 * 1024, 1024 * 1024, r * TestK);
+    int alive_cnt = TestN - fail_servers.size();
+    int reserved_server_cnt = alive_cnt - TestF;
+    int reserve_for_each = r / reserved_server_cnt * fail_servers.size();
 
     // Do encoding
     ccm.EncodeForPlacement(slice, aliveness);
@@ -58,6 +61,8 @@ class CodeConversionManagementTest : public ::testing::Test {
     for (int i = 0; i < TestN; ++i) {
       if (std::find(fail_servers.begin(), fail_servers.end(), i) != fail_servers.end()) {
         ASSERT_EQ(data[i].size(), 0);
+      } else {
+        ASSERT_EQ(data[i].size(), r + reserve_for_each);
       }
     }
 
@@ -124,7 +129,7 @@ TEST_F(CodeConversionManagementTest, TestAdjustChunkDistribution) {
   // Gather the data
   std::map<raft_node_id_t, ChunkVector> data;
 
-  /// !!!! Add another failure, adjust the data distribution
+  /// !!!! Add another failure, adjust the data distribution !!!!
   raft_node_id_t f2 = 5;
   is_alive[f2] = false;
   ccm.AdjustChunkDistribution(is_alive);

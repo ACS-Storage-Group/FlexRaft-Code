@@ -85,6 +85,22 @@ auto operator==(const LogEntry &lhs, const LogEntry &rhs) -> bool {
   if (lhs_frag_data.valid() && rhs_frag_data.valid()) {
     frag_equal = lhs_frag_data.compare(rhs_frag_data) == 0;
   }
-  return frag_equal;
+
+  if (!frag_equal) {
+    return false;
+  }
+
+  // Check if sizes equal to each other
+  auto cv_equal = lhs.ChunkVector().size() == rhs.ChunkVector().size();
+  if (!cv_equal) {
+    return false;
+  }
+  // Check if each element equal to each other
+  for (int i = 0; i < lhs.ChunkVector().size(); ++i) {
+    if (lhs.ChunkVector().chunk_at(i) != rhs.ChunkVector().chunk_at(i)) {
+      return false;
+    }
+  }
+  return true;
 }
 }  // namespace raft

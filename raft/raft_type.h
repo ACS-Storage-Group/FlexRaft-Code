@@ -137,6 +137,71 @@ struct ChunkInfo {
   }
 };
 
+class Slice {
+ public:
+  static Slice Copy(const Slice &slice) {
+    auto data = new char[slice.size() + 12];
+    std::memcpy(data, slice.data(), slice.size());
+    return Slice(data, slice.size());
+  }
+
+ public:
+  Slice(char *data, size_t size) : data_(data), size_(size) {}
+  Slice(const std::string &s) : data_(new char[s.size()]), size_(s.size()) {
+    std::memcpy(data_, s.c_str(), size_);
+  }
+
+  Slice() = default;
+  Slice(const Slice &) = default;
+  Slice &operator=(const Slice &) = default;
+
+  auto data() const -> char * { return data_; }
+  auto size() const -> size_t { return size_; }
+  auto valid() const -> bool { return data_ != nullptr && size_ > 0; }
+  auto toString() const -> std::string { return std::string(data_, size_); }
+
+  // Require both slice are valid
+  auto compare(const Slice &slice) -> int {
+    assert(valid() && slice.valid());
+    auto cmp_len = std::min(size(), slice.size());
+    auto cmp_res = std::memcmp(data(), slice.data(), cmp_len);
+    if (cmp_res != 0 || size() == slice.size()) {
+      return cmp_res;
+    }
+    return size() > slice.size() ? 1 : -1;
+  }
+
+  // Shard the slice into multiple equal-sized subslices:
+  // Note that it must be size_ % k = 0:
+  auto Shard(int k) const -> std::vector<Slice> {
+    auto sub_sz = size() / k;
+    std::vector<Slice> v;
+    auto d = data();
+    for (int i = 0; i < k; ++i) {
+      v.push_back(Slice(d, sub_sz));
+      d += sub_sz;
+    }
+    return v;
+  }
+
+  // Combine the contents of multiple slices into one single slice
+  static auto Combine(const std::vector<Slice> &slices) -> Slice {
+    size_t alloc_sz = 0;
+    for (const auto &s : slices) alloc_sz += s.size();
+    auto alloc_data = new char[alloc_sz];
+    auto d = alloc_data;
+    for (const auto &s : slices) {
+      std::memcpy(d, s.data(), s.size());
+      d += s.size();
+    }
+    return Slice(alloc_data, alloc_sz);
+  }
+
+ private:
+  char *data_ = nullptr;
+  size_t size_ = 0;
+};
+
 // Structs that are related to raft core algorithm
 
 }  // namespace raft

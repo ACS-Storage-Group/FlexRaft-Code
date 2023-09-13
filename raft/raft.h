@@ -6,6 +6,7 @@
 #include <set>
 #include <unordered_map>
 
+#include "chunk.h"
 #include "code_conversion.h"
 #include "encoder.h"
 #include "log_entry.h"
@@ -303,6 +304,10 @@ class RaftState {
   void EncodeRaftEntry(raft_index_t raft_index, raft_encoding_param_t k, raft_encoding_param_t m,
                        Stripe *stripe);
 
+  void EncodeRaftEntryForCodeConversion(raft_index_t raft_index, const std::vector<bool> &live_vec,
+                                        CODE_CONVERSION_NAMESPACE::CodeConversionManagement *ccm,
+                                        Stripe *stripe);
+
   void CalChunkDistributionForRaftEntry(raft_index_t raft_index, int k, int r,
                                         const std::vector<bool> &live_vec,
                                         code_conversion::ChunkDistribution *cd);
@@ -465,7 +470,7 @@ class RaftState {
 
   // For each index, the leader records the distribution information of each chunk splitted
   // from the entry
-  std::unordered_map<raft_index_t, code_conversion::ChunkDistribution *> chunk_distribution_;
+  std::unordered_map<raft_index_t, code_conversion::CodeConversionManagement *> cc_managment_;
 
   // For each index, last_encoding contains the most recent encoding parameters
   // k since it determines if there is a newer version of encoding

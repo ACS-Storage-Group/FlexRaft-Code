@@ -204,6 +204,14 @@ inline int64_t DurationToMicros(TimePoint start, TimePoint end) {
   return std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
 }
 
+inline int GetPositiveNumber(const std::vector<bool> &vec) {
+  int ret = 0;
+  for (const auto &v : vec) {
+    ret += v;
+  }
+  return ret;
+}
+
 // ---- Related utility functions for code conversion: ------
 //
 // Calculate the greatest common divisor of two integers
@@ -238,7 +246,7 @@ struct LatencyGuard {
 
   LatencyGuard(CallBack cb) : start_(NowTime()), cb_(cb) {}
   ~LatencyGuard() {
-#define ENABLE_LATENCY_GUARD
+// #define ENABLE_LATENCY_GUARD
 #ifdef ENABLE_LATENCY_GUARD
     auto dura = DurationToMicros(start_, NowTime());
     cb_(dura);

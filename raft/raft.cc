@@ -11,6 +11,7 @@
 #include <thread>
 #include <vector>
 
+#include "chunk.h"
 #include "code_conversion.h"
 #include "encoder.h"
 #include "log_entry.h"
@@ -912,6 +913,46 @@ void RaftState::EncodeRaftEntry(raft_index_t raft_index, raft_encoding_param_t k
   }
 }
 
+void RaftState::EncodeRaftEntryForCodeConversion(
+    raft_index_t raft_index, const std::vector<bool> &live_vec,
+    CODE_CONVERSION_NAMESPACE::CodeConversionManagement *ccm, Stripe *stripe) {
+  auto ent = lm_->GetSingleLogEntry(raft_index);
+  assert(ent != nullptr);
+
+  static auto opt_k = live_vec.size() - livenessLevel();
+  uint32_t cc_k = opt_k - (live_vec.size() - util::GetPositiveNumber(live_vec));
+
+  stripe->raft_index = ent->Index();
+  stripe->raft_term = ent->Term();
+  stripe->fragments.clear();
+
+  LOG(util::kRaft, "S%d Encode I%d T%d, Live: %s", id_, raft_index, stripe->raft_term,
+      util::ToString(live_vec).c_str());
+  auto slice = Slice(ent->CommandData().data() + ent->StartOffset(),
+                     ent->CommandData().size() - ent->StartOffset());
+  ccm->EncodeForPlacement(slice, live_vec);
+
+  for (int i = 0; i < live_vec.size(); ++i) {
+    LogEntry encoded_ent;
+    encoded_ent.SetIndex(raft_index);
+    encoded_ent.SetTerm(stripe->raft_term);
+    encoded_ent.SetType(kFragments);
+    encoded_ent.SetChunkInfo(ChunkInfo{cc_k, raft_index});
+    encoded_ent.SetStartOffset(ent->StartOffset());
+
+    encoded_ent.SetCommandLength(ent->CommandLength());
+    encoded_ent.SetNotEncodedSlice(Slice(ent->CommandData().data(), ent->StartOffset()));
+    encoded_ent.SetFragmentSlice(Slice(nullptr, 0));
+
+    // Set the chunk vector
+    auto cv = ccm->GetOriginalChunkVector(i);
+    cv.Concatenate(ccm->GetReservedChunkVector(i));
+    encoded_ent.SetChunkVector(cv);
+
+    stripe->fragments[i] = encoded_ent;
+  }
+}
+
 void RaftState::CalChunkDistributionForRaftEntry(raft_index_t raft_index, int k, int r,
                                                  const std::vector<bool> &live_vec,
                                                  code_conversion::ChunkDistribution *cd) {
@@ -1004,11 +1045,10 @@ void RaftState::ReplicateNewProposeEntryCodeConversion(raft_index_t raft_index) 
   LOG(util::kRaft, "S%d Estimates %d Alive Servers: %s", id_, live_vec.size(),
       util::ToString(live_vec).c_str());
 
-  auto total_chunk_num = code_conversion::get_chunk_count(encode_k);
+  auto total_chunk_num = CODE_CONVERSION_NAMESPACE::get_chunk_count(encode_k);
   auto r = total_chunk_num / encode_k;
-  auto cd = new code_conversion::ChunkDistribution(livenessLevel(), encode_k, r);
-
-  chunk_distribution_.insert_or_assign(raft_index, cd);
+  auto ccm = new CODE_CONVERSION_NAMESPACE::CodeConversionManagement(encode_k, livenessLevel(), r);
+  cc_managment_.insert_or_assign(raft_index, ccm);
 }
 
 void RaftState::ReplicateNewProposeEntry(raft_index_t raft_index) {

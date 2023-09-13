@@ -10,7 +10,6 @@
 
 #include "chunk.h"
 #include "encoder.h"
-#include "log_entry.h"
 #include "raft_type.h"
 #include "util.h"
 
@@ -53,9 +52,18 @@ class CodeConversionManagement {
     return ChunkVector();
   }
 
-  // Adjust the chunk placement according to the new ChunkDistribution. 
+  // Adjust the chunk placement according to the new ChunkDistribution.
   // Note that this function would clear all slice that are allocated in last round.
   void AdjustChunkDistribution(const ChunkDistribution& cd);
+
+  // If an original chunk corresponded to a specific node has been received by this node,
+  // set the corresponding vector bit to be true.
+  void UpdateOrgChunkResponseInfo(raft_node_id_t node_id);
+
+  // Return true if the enqueried server has received the original chunk.
+  bool HasReceivedOrgChunk(raft_node_id_t node_id) const {
+    return org_chunk_response_[node_id] == true;
+  }
 
  private:
   // Prepare the original chunks and write them into the org_chunks_ attribute
@@ -87,10 +95,11 @@ class CodeConversionManagement {
 
  private:
   int k_, F_, r_;
-  std::unordered_map<raft_node_id_t, ChunkVector> node_2_org_chunks_, node_2_reserved_chunks_;
+  std::map<raft_node_id_t, ChunkVector> node_2_org_chunks_;
+  std::map<raft_node_id_t, ChunkVector> node_2_reserved_chunks_;
   std::vector<Slice> org_chunks_[kMaxNodeNum];
   // A response vector indicate whether a node has received the original chunks
-  bool org_chunk_response_[kMaxNodeNum];
+  bool org_chunk_response_[kMaxNodeNum] = {false};
 };
 };  // namespace CODE_CONVERSION_NAMESPACE
 

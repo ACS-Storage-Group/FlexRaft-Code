@@ -3,6 +3,7 @@
 #include <cstring>
 
 #include "RCF/ByteBuffer.hpp"
+#include "chunk.h"
 #include "log_entry.h"
 #include "raft_struct.h"
 #include "raft_type.h"
@@ -11,23 +12,29 @@ namespace raft {
 Serializer Serializer::NewSerializer() { return Serializer(); }
 
 char *Serializer::serialize_logentry_helper(const LogEntry *entry, char *dst) {
-  // NOTE: It is ok to simply copy sizeof(LogEntry) here
-  std::memcpy(dst, entry, sizeof(LogEntry));
+  // NOTE: It is not ok to simply copy sizeof(LogEntry) here since the internal layout of 
+  // std::vector<Chunk> might be changed
+  std::memcpy(dst, entry, sizeof(LogEntry) - sizeof(CODE_CONVERSION_NAMESPACE::ChunkVector));
   dst += sizeof(LogEntry);
   dst = PutPrefixLengthSlice(entry->NotEncodedSlice(), dst);
   dst = PutPrefixLengthSlice(entry->FragmentSlice(), dst);
+  auto cv = entry->ChunkVector();
+  dst = cv.Serialize(dst);
   return dst;
 }
 
 const char *Serializer::deserialize_logentry_helper(const char *src, LogEntry *entry) {
-  std::memcpy(entry, src, sizeof(LogEntry));
+  std::memcpy(entry, src, sizeof(LogEntry) - sizeof(CODE_CONVERSION_NAMESPACE::ChunkVector));
   src += sizeof(LogEntry);
   Slice not_encoded, frag;
   src = ParsePrefixLengthSlice(src, &not_encoded);
   src = ParsePrefixLengthSlice(src, &frag);
+  CODE_CONVERSION_NAMESPACE::ChunkVector cv;
+  src = cv.Deserialize(src);
 
   entry->SetNotEncodedSlice(not_encoded);
   entry->SetFragmentSlice(frag);
+  entry->SetChunkVector(cv);
 
   if (entry->Type() == kNormal) {
     entry->SetCommandData(not_encoded);
@@ -201,6 +208,8 @@ size_t Serializer::getSerializeSize(const LogEntry &entry) {
   ret += entry.NotEncodedSlice().size();
   ret += entry.FragmentSlice().size();
   ret += 2 * sizeof(size_t);
+  // Add the size for ChunkVector
+  ret += entry.ChunkVector().SizeForSerialization();
   // Make size 4B aligment
   return (ret - 1) / 4 * 4 + 4;
 }

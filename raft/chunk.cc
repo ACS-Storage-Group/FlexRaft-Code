@@ -14,20 +14,25 @@ ChunkIndex convert_to_chunk_index(raft_chunk_id_t d, int r) { return ChunkIndex(
 
 raft_chunk_id_t convert_to_chunk_id(ChunkIndex d, int r) { return d.node_id * r + d.chunk_id; }
 
-Slice ChunkVector::Serialize() {
-  // Calculate the size of the serialized data:
-  // We need the space for two chunk index. And two uint32_t for locating the slice
+size_t ChunkVector::SizeForSerialization() const {
   auto hdr_sz_for_each = sizeof(ChunkIndex) * 2 + sizeof(uint32_t) * 2;
   auto hdr_sz = sizeof(uint32_t) + hdr_sz_for_each * chunks_.size();
   auto alloc_sz = hdr_sz;
   for (const auto& chunk : chunks_) {
     alloc_sz += chunk.size();
   }
+  return alloc_sz;
+}
 
-  auto d = new char[alloc_sz];
+size_t ChunkVector::HeaderSizeForSerialization() const {
+  auto hdr_sz_for_each = sizeof(ChunkIndex) * 2 + sizeof(uint32_t) * 2;
+  auto hdr_sz = sizeof(uint32_t) + hdr_sz_for_each * chunks_.size();
+  return hdr_sz;
+}
 
+char* ChunkVector::Serialize(char* d) {
   // Serialize the data
-  int h_offset = sizeof(uint32_t), d_offset = hdr_sz;
+  int h_offset = sizeof(uint32_t), d_offset = HeaderSizeForSerialization();
   for (const auto& chunk : chunks_) {
     // Firstly write the data
     std::memcpy(d + d_offset, chunk.data(), chunk.size());
@@ -47,36 +52,48 @@ Slice ChunkVector::Serialize() {
 
   // Record the number of elements stored in this ChunkVector
   *(uint32_t*)d = chunks_.size();
+  return d + d_offset;
+}
+
+Slice ChunkVector::Serialize() {
+  auto alloc_sz = SizeForSerialization();
+  auto hdr_sz = HeaderSizeForSerialization();
+
+  auto d = new char[alloc_sz];
+  auto b = Serialize(d);
+  (void)b;
 
   return Slice(d, alloc_sz);
 }
 
 bool ChunkVector::Deserialize(const Slice& s) {
+  Deserialize(s.data());
+  return true;
+}
+
+const char* ChunkVector::Deserialize(const char* s) {
   this->chunks_.clear();
 
   // Firstly, get the number of chunk within this slice
-  auto d = s.data();
+  auto d = s;
   uint32_t chunk_count = *(uint32_t*)d;
 
   uint32_t h_off = sizeof(uint32_t);
+  uint32_t d_off, sz;
   for (uint32_t i = 0; i < chunk_count; ++i) {
     ChunkIndex idx1, idx2;
-    char* tmp = idx1.Deserialize(d + h_off);
+    const char* tmp = idx1.Deserialize(d + h_off);
     tmp = idx2.Deserialize(tmp);
 
-    auto d_off = *(uint32_t*)(tmp);
-    auto sz = *(uint32_t*)(tmp + sizeof(uint32_t));
+    d_off = *(uint32_t*)(tmp);
+    sz = *(uint32_t*)(tmp + sizeof(uint32_t));
 
-    // Corrupted data
-    if (d_off >= s.size() || d_off + sz > s.size()) {
-      return false;
-    }
-
-    chunks_.emplace_back(idx1, idx2, Slice(d + d_off, sz));
+    // Copy the data out
+    chunks_.emplace_back(idx1, idx2, Slice::Copy(Slice(const_cast<char*>(d + d_off), sz)));
     h_off = tmp - d + sizeof(uint32_t) * 2;
   }
 
-  return true;
+  return d + d_off + sz;
 }
 
 void ChunkPlacementInfo::GenerateInfoFromLivenessVector(const std::vector<bool>& live_vec) {

@@ -431,5 +431,9 @@ void CodeConversionManagement::AdjustChunkDistribution(const ChunkDistribution& 
   EncodeReservedChunksAndAssignToNode(cd);
 }
 
+void CodeConversionManagement::UpdateOrgChunkResponseInfo(raft_node_id_t node_id) {
+  org_chunk_response_[node_id] = true;
+}
+
 };  // namespace CODE_CONVERSION_NAMESPACE
 };  // namespace raft

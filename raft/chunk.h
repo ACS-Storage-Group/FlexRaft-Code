@@ -9,8 +9,6 @@
 #include <sstream>
 #include <unordered_map>
 
-#include "encoder.h"
-#include "log_entry.h"
 #include "raft_type.h"
 #include "util.h"
 
@@ -53,7 +51,7 @@ struct ChunkIndex {
     return d + sizeof(int16_t) * 2;
   }
 
-  char* Deserialize(char* s) {
+  const char* Deserialize(const char* s) {
     node_id = *(int16_t*)s;
     chunk_id = *(int16_t*)(s + sizeof(int16_t));
     return s + sizeof(int16_t) * 2;
@@ -80,6 +78,7 @@ struct Chunk {
   Chunk() = default;
   Chunk(const Chunk&) = default;
   Chunk& operator=(const Chunk&) = default;
+  ~Chunk() = default;
 
   char* data() const { return data_.data(); }
   size_t size() const { return data_.size(); }
@@ -93,6 +92,12 @@ struct Chunk {
     ss << "[" << idx1_.ToString() << "," << idx2_.ToString() << "]";
     return ss.str();
   }
+
+  bool operator==(const Chunk& r) const {
+    return this->idx1_ == r.idx1_ && this->idx2_ == r.idx2_ && this->slice().compare(r.data_) == 0;
+  }
+
+  bool operator!=(const Chunk& r) const { return !operator==(r); }
 };
 
 // A ChunkVector is a vector of chunks which should be stored within a single server
@@ -110,8 +115,19 @@ struct ChunkVector {
   // Serialize this ChunkVector to a slice and return the data
   Slice Serialize();
 
+  // Serialize the size to a start address and return the last position after serialization
+  char* Serialize(char* d);
+
+  // Return the size needed for serializing this ChunkVector
+  size_t SizeForSerialization() const;
+
+  // Return the size needed for serializing the header
+  size_t HeaderSizeForSerialization() const;
+
   // Deserialize the ChunkVector from a slice
   bool Deserialize(const Slice& s);
+
+  const char* Deserialize(const char* s);
 
   ChunkVector SubVec(int l, int r) const {
     ChunkVector ret;
