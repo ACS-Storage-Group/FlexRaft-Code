@@ -324,7 +324,7 @@ class RaftNodeTest : public ::testing::Test {
 
     // Dump all contents of fragments
     for (const auto &[id, cv] : collected_cv) {
-      LOG(util::kRaft, "[CC] Collect ChunkVector(%d) from S%d", cv.size(), id);
+      LOG(util::kRaft, "[CC] Collect ChunkVector(size=%d) from S%d", cv.size(), id);
     }
 
     // Failed ChunkVector recovering
@@ -372,6 +372,7 @@ class RaftNodeTest : public ::testing::Test {
 
   void Disconnect(raft_node_id_t id) {
     // std::cout << "Disconnect " << id << std::endl;
+    LOG(util::kRaft, "------ Disconnect S%d ------", id);
     if (!nodes_[id]->IsDisconnected()) {
       nodes_[id]->Disconnect();
     }

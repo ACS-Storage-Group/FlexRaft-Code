@@ -50,7 +50,7 @@ RaftState *RaftState::NewRaftState(const RaftConfig &config) {
     ret->peers_.insert(id);
     ret->raft_peer_[id] = peer;
     ret->rpc_clients_[id] = rpc;
-    printf("Insert id: %d rpc=%p peer=%p\n", id, rpc, peer);
+    // LOG(util::kRaft, "Insert id: %d rpc=%p peer=%p\n", id, rpc, peer);
   }
 
   // Construct log manager from persistence storage
@@ -721,6 +721,7 @@ void RaftState::CheckConflictEntryAndAppendNewCodeConversion(AppendEntriesArgs *
     // Check if we need to overwrite this entry, note that all these entries are
     // aligned with (index, term)
     auto ent = lm_->GetSingleLogEntry(raft_index);
+
     // Since this entry passes the test for [raft_index, raft_term], it is supposed to contain the
     // original chunks, so we only need to overwrite the reserved chunks
     assert(ent->GetOriginalChunkVector().size() > 0);
@@ -763,7 +764,7 @@ void RaftState::CheckConflictEntryAndAppendNewCodeConversion(AppendEntriesArgs *
     auto reply_chunk_info = args->entries[i].GetChunkInfo();
     reply_chunk_info.contain_original = true;
     LOG(util::kRaft, "[CC] S%d APPEND I%d OrgChunks(%d) ReserveChunks(%d)", id_, raft_index,
-        org_entry.GetOriginalChunkVector().size(), reserve_entry.GetOriginalChunkVector().size());
+        org_entry.GetOriginalChunkVector().size(), reserve_entry.GetReservedChunkVector().size());
     reply->chunk_infos.push_back(reply_chunk_info);
   }
 
@@ -836,39 +837,41 @@ void RaftState::tryUpdateCommitIndex() {
 // TODO: Use a specific thread to commit applied entries to application
 // Do not call this function in RPC, which may results in blocked RPC
 void RaftState::tryApplyLogEntries() {
-  while (last_applied_ < commit_index_) {
-    auto old_apply_idx = last_applied_;
+  // Apply log entries in a code conversion manner
+  tryApplyLogEntriesCodeConversion();
+  // while (last_applied_ < commit_index_) {
+  //   auto old_apply_idx = last_applied_;
 
-    // apply this message on state machine:
-    if (rsm_ != nullptr) {
-      // In asynchronize applying scheme, the applier thread may find that one
-      // entry has been released due to the main thread adding more commands.
-      LogEntry ent;
-      auto stat = lm_->GetEntryObject(last_applied_ + 1, &ent);
-      assert(stat == kOk);
+  //   // apply this message on state machine:
+  //   if (rsm_ != nullptr) {
+  //     // In asynchronize applying scheme, the applier thread may find that one
+  //     // entry has been released due to the main thread adding more commands.
+  //     LogEntry ent;
+  //     auto stat = lm_->GetEntryObject(last_applied_ + 1, &ent);
+  //     assert(stat == kOk);
 
-      // if (ent.Index() == 3) {
-      //   auto val = *reinterpret_cast<int*>(ent.CommandData().data());
-      //   LOG(util::kRaft, "S%d in APPLY detect value=%d", id_, val);
-      // }
+  //     // if (ent.Index() == 3) {
+  //     //   auto val = *reinterpret_cast<int*>(ent.CommandData().data());
+  //     //   LOG(util::kRaft, "S%d in APPLY detect value=%d", id_, val);
+  //     // }
 
-      rsm_->ApplyLogEntry(ent);
-      LOG(util::kRaft, "S%d Push ent(I%d T%d) to channel", id_, ent.Index(), ent.Term());
+  //     rsm_->ApplyLogEntry(ent);
+  //     LOG(util::kRaft, "S%d Push ent(I%d T%d) to channel", id_, ent.Index(), ent.Term());
 
-      // !!! [PERF]: Record the end time of commit and calculating the elapse
-      // time
-      //
-      // if (commit_start_time_.count(ent.Index()) != 0) {
-      //   auto end = std::chrono::high_resolution_clock::now();
-      //   auto dura = std::chrono::duration_cast<std::chrono::microseconds>(
-      //       end - commit_start_time_[ent.Index()]);
-      //   commit_elapse_time_[ent.Index()] = dura.count();
-      // }
-      //
-    }
-    last_applied_ += 1;
-    LOG(util::kRaft, "S%d APPLY(%d->%d)", id_, old_apply_idx, last_applied_);
-  }
+  //     // !!! [PERF]: Record the end time of commit and calculating the elapse
+  //     // time
+  //     //
+  //     // if (commit_start_time_.count(ent.Index()) != 0) {
+  //     //   auto end = std::chrono::high_resolution_clock::now();
+  //     //   auto dura = std::chrono::duration_cast<std::chrono::microseconds>(
+  //     //       end - commit_start_time_[ent.Index()]);
+  //     //   commit_elapse_time_[ent.Index()] = dura.count();
+  //     // }
+  //     //
+  //   }
+  //   last_applied_ += 1;
+  //   LOG(util::kRaft, "S%d APPLY(%d->%d)", id_, old_apply_idx, last_applied_);
+  // }
 }
 
 void RaftState::tryApplyLogEntriesCodeConversion() {
@@ -881,14 +884,19 @@ void RaftState::tryApplyLogEntriesCodeConversion() {
       auto stat = lm_->GetEntryObject(last_applied_ + 1, &ent);
       assert(stat == kOk);
 
-      stat = reserve_lm_->GetEntryObject(last_applied_ + 1, &reserved_ent);
-      assert(stat == kOk);
+      // Combine the original chunks and reserved chunks together for applying
+      if (ent.Type() == kFragments) {
+        stat = reserve_lm_->GetEntryObject(last_applied_ + 1, &reserved_ent);
+        assert(stat == kOk);
 
-      // Combine both the original ChunkVector and reserved ChunkVector
-      ent.SetReservedChunkVector(reserved_ent.GetReservedChunkVector());
+        // Combine both the original ChunkVector and reserved ChunkVector
+        ent.SetReservedChunkVector(reserved_ent.GetReservedChunkVector());
+      }
 
       rsm_->ApplyLogEntry(ent);
-      LOG(util::kRaft, "[CC] S%d Push ent(I%d T%d) to channel", id_, ent.Index(), ent.Term());
+      LOG(util::kRaft, "[CC] S%d Push ent(I%d T%d Org(%d) Reserve(%d)) to channel", id_,
+          ent.Index(), ent.Term(), ent.GetOriginalChunkVector().size(),
+          ent.GetReservedChunkVector().size());
     }
     last_applied_ += 1;
     LOG(util::kRaft, "[CC] S%d APPLY(%d->%d)", id_, old_apply_idx, last_applied_);
@@ -1680,6 +1688,9 @@ void RaftState::sendAppendEntriesCodeConversion(raft_node_id_t peer) {
       LOG(util::kRaft, "[CC] S%d AE To S%d(REMOVE Org Chunk At I%d) at T%d", id_, peer, raft_index,
           CurrentTerm());
     }
+    LOG(util::kRaft, "[CC] S%d AE To S%d I%d (Org: %d Reserve: %d)", id_, peer, raft_index,
+        args.entries.back().GetOriginalChunkVector().size(),
+        args.entries.back().GetReservedChunkVector().size());
   }
 
   LOG(util::kRaft, "S%d AE To S%d (I%d->I%d) at T%d", id_, peer, next_index,

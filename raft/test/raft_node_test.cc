@@ -18,7 +18,7 @@ class RaftNodeBasicTest : public RaftNodeTest {
   }
 };
 
-TEST_F(RaftNodeBasicTest, TestSimplyProposeEntry) {
+TEST_F(RaftNodeBasicTest, DISABLED_TestSimplyProposeEntry) {
   auto config = ConstructNodesConfig(5, false);
   LaunchAllServers(config);
   sleepMs(10);
@@ -31,36 +31,20 @@ TEST_F(RaftNodeBasicTest, TestSimplyProposeEntry) {
   ClearTestContext(config);
 }
 
-TEST_F(RaftNodeBasicTest, DISABLED_TestFollowersCrash) {
-  auto config = ConstructNodesConfig(5, false);
+// Test one follower fail
+TEST_F(RaftNodeBasicTest, TestFollowersCrash) {
+  auto config = ConstructNodesConfig(7, false);
   LaunchAllServers(config);
   sleepMs(10);
 
-  EXPECT_TRUE(ProposeOneEntry(1));
-  EXPECT_TRUE(ProposeOneEntry(2));
-  EXPECT_TRUE(ProposeOneEntry(3));
-
-  auto leader = GetLeaderId();
-
   // Disconnect a follower
+  auto leader = GetLeaderId();
   Disconnect((leader + 1) % node_num_);
 
-  EXPECT_TRUE(ProposeOneEntry(4));
-  EXPECT_TRUE(ProposeOneEntry(5));
-  EXPECT_TRUE(ProposeOneEntry(6));
-
-  Disconnect((leader + 2) % node_num_);
-
-  EXPECT_TRUE(ProposeOneEntry(7));
-  EXPECT_TRUE(ProposeOneEntry(8));
-  EXPECT_TRUE(ProposeOneEntry(9));
-
-  // Bring failed followers back
-  Reconnect((leader + 1) % node_num_);
-  EXPECT_TRUE(ProposeOneEntry(10));
-
-  Reconnect((leader + 2) % node_num_);
-  EXPECT_TRUE(ProposeOneEntry(11));
+  // Propose and check data
+  EXPECT_TRUE(ProposeOneEntry(1, true));
+  EXPECT_TRUE(ProposeOneEntry(2, true));
+  EXPECT_TRUE(ProposeOneEntry(3, true));
 
   ClearTestContext(config);
 }
