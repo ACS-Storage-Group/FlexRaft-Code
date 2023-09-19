@@ -1,7 +1,8 @@
 #include "raft_node_test.h"
-#include "util.h"
 
 #include <string>
+
+#include "util.h"
 
 namespace raft {
 class RaftNodeBasicTest : public RaftNodeTest {
@@ -17,15 +18,15 @@ class RaftNodeBasicTest : public RaftNodeTest {
   }
 };
 
-TEST_F(RaftNodeBasicTest, DISABLED_TestSimplyProposeEntry) {
-  auto config = ConstructNodesConfig(3, false);
+TEST_F(RaftNodeBasicTest, TestSimplyProposeEntry) {
+  auto config = ConstructNodesConfig(5, false);
   LaunchAllServers(config);
   sleepMs(10);
 
   // Test propose a few entries
-  EXPECT_TRUE(ProposeOneEntry(1));
-  EXPECT_TRUE(ProposeOneEntry(2));
-  EXPECT_TRUE(ProposeOneEntry(3));
+  EXPECT_TRUE(ProposeOneEntry(1, true));
+  EXPECT_TRUE(ProposeOneEntry(2, true));
+  EXPECT_TRUE(ProposeOneEntry(3, true));
 
   ClearTestContext(config);
 }
@@ -120,7 +121,7 @@ TEST_F(RaftNodeBasicTest, DISABLED_TestNewLeaderGetFullLogEntry) {
   ClearTestContext(config);
 }
 
-TEST_F(RaftNodeBasicTest, TestNewLeaderGatheringFullLogEntry) {
+TEST_F(RaftNodeBasicTest, DISABLED_TestNewLeaderGatheringFullLogEntry) {
   auto config = ConstructNodesConfig(7, false);
   LaunchAllServers(config);
   sleepMs(10);

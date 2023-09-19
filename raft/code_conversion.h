@@ -57,7 +57,7 @@ class CodeConversionManagement {
 
   // If an original chunk corresponded to a specific node has been received by this node,
   // set the corresponding vector bit to be true.
-  void UpdateOrgChunkResponseInfo(raft_node_id_t node_id);
+  void UpdateOrgChunkResponseInfo(raft_node_id_t node_id, bool t);
 
   // Return true if the enqueried server has received the original chunk.
   bool HasReceivedOrgChunk(raft_node_id_t node_id) const {

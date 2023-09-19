@@ -92,6 +92,6 @@ class RaftNode {
   std::atomic<bool> exit_;
   std::atomic<bool> disconnected_;
   Rsm *rsm_;
-  Storage *storage_;
+  Storage *storage_, *reserve_storage_;
 };
 }  // namespace raft

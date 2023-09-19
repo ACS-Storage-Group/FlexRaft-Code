@@ -20,8 +20,12 @@ RaftNode::RaftNode(const NodeConfig &node_config)
       rsm_(node_config.rsm) {
   if (node_config.storage_filename != "") {
     storage_ = FileStorage::Open(node_config.storage_filename);
+    // Temporarily set the reserve_storage to be nullptr
+    reserve_storage_ = nullptr;
   } else {
     storage_ = nullptr;
+    // Temporarily set reserve_storage to be nullptr
+    reserve_storage_ = nullptr;
   }
 }
 
@@ -38,9 +42,13 @@ void RaftNode::Init() {
   }
 
   // Create Raft State instance
-  RaftConfig config = RaftConfig{
-      node_id_me_, rcf_clients_, storage_, config::kElectionTimeoutMin, config::kElectionTimeoutMax,
-      rsm_};
+  RaftConfig config = RaftConfig{node_id_me_,
+                                 rcf_clients_,
+                                 storage_,
+                                 reserve_storage_,
+                                 config::kElectionTimeoutMin,
+                                 config::kElectionTimeoutMax,
+                                 rsm_};
   raft_state_ = RaftState::NewRaftState(config);
 
   // Set related state for all RPC related struct

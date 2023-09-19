@@ -50,6 +50,8 @@ struct RaftConfig {
   // nullptr. If storage is nullptr, any change to RaftState will not be
   // persisted
   Storage *storage;
+  // Storage for storing reserved chunks
+  Storage *reserve_storage;
 
   int64_t electionTimeMin, electionTimeMax;
 
@@ -236,7 +238,7 @@ class RaftState {
   void Process(AppendEntriesReply *reply);
 
   void ProcessCodeConversion(AppendEntriesArgs *args, AppendEntriesReply *reply);
-  void ProcessCodeConversion(AppendEntriesReply* reply);
+  void ProcessCodeConversion(AppendEntriesReply *reply);
 
   void Process(RequestFragmentsArgs *args, RequestFragmentsReply *reply);
   void Process(RequestFragmentsReply *reply);
@@ -302,6 +304,8 @@ class RaftState {
 
   void tryApplyLogEntries();
 
+  void tryApplyLogEntriesCodeConversion();
+
   // Encoding specified log entry with encoding parameter k, m, the results is
   // written into specified stripe
   void EncodeRaftEntry(raft_index_t raft_index, raft_encoding_param_t k, raft_encoding_param_t m,
@@ -312,7 +316,8 @@ class RaftState {
                                         Stripe *stripe);
   // Adjust the Chunk distribution for a single entry at specific index position
   void AdjustChunkDistributionCodeConversion(raft_index_t raft_index,
-                                             const std::vector<bool> &live_vec);
+                                             const std::vector<bool> &live_vec,
+                                             raft_encoding_param_t code_conversion_k);
 
   // Decoding all fragments contained in a stripe into a complete log entry
   bool DecodingRaftEntry(Stripe *stripe, LogEntry *ent);
@@ -346,7 +351,7 @@ class RaftState {
   void resetElectionTimer();
   void resetHeartbeatTimer();
   void resetPreLeaderTimer();
-  void resetReplicateTimer();
+  void resetReplicationTimer();
 
   void convertToFollower(raft_term_t term);
   void convertToCandidate();
@@ -404,6 +409,8 @@ class RaftState {
   // it is, re-encoding and replicate entries to all followers; otherwise,
   // simply replicate entries according to the NextIndex of each followers
   void ReplicateEntries();
+
+  void ReplicateEntriesCodeConversion();
 
   // Some re-encoding work might by needed due to number of alive servers has
   // been changed.

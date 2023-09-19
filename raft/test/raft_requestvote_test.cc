@@ -16,18 +16,15 @@
 
 namespace raft {
 
-static bool inline RequestVoteReplyEqual(const RequestVoteReply &l,
-                                         const RequestVoteReply &r) {
+static bool inline RequestVoteReplyEqual(const RequestVoteReply &l, const RequestVoteReply &r) {
   return std::memcmp(&l, &r, sizeof(RequestVoteReply)) == 0;
 }
 
-static bool inline RequestVoteArgsEqual(const RequestVoteArgs &l,
-                                        const RequestVoteArgs &r) {
+static bool inline RequestVoteArgsEqual(const RequestVoteArgs &l, const RequestVoteArgs &r) {
   return std::memcmp(&l, &r, sizeof(RequestVoteArgs)) == 0;
 }
 
-static bool inline AppendEntriesArgsEqual(const AppendEntriesArgs &l,
-                                          const AppendEntriesArgs &r) {
+static bool inline AppendEntriesArgsEqual(const AppendEntriesArgs &l, const AppendEntriesArgs &r) {
   // bool hdr_equal = std::memcmp(&l, &r, kAppendEntriesArgsHdrSize) == 0;
   bool hdr_equal = l.term == r.term & l.prev_log_index == r.prev_log_index &
                    l.prev_log_term == r.prev_log_term & l.leader_id == r.leader_id &
@@ -319,7 +316,7 @@ TEST_F(RaftElectionTest, TestStartElectionIfTimeOut) {
   RpcClientMock::AppendEntriesMsgChannel channel2;
   RpcClientMock rpc2(&channel1, &channel2);
   RpcClientMock rpc3(&channel1, &channel2);
-  RaftConfig config = {1, {{1, nullptr}, {2, &rpc2}, {3, &rpc3}}, nullptr, 150, 200};
+  RaftConfig config = {1, {{1, nullptr}, {2, &rpc2}, {3, &rpc3}}, nullptr, nullptr, 150, 200};
   auto raft = RaftState::NewRaftState(config);
   raft->SetRole(kFollower);
 
@@ -347,7 +344,7 @@ TEST_F(RaftElectionTest, TestRestartElectionIfNotReceiveReply) {
   RpcClientMock::AppendEntriesMsgChannel channel2;
   RpcClientMock rpc2(&channel1, &channel2);
   RpcClientMock rpc3(&channel1, &channel2);
-  RaftConfig config = {1, {{1, nullptr}, {2, &rpc2}, {3, &rpc3}}, nullptr, 150, 200};
+  RaftConfig config = {1, {{1, nullptr}, {2, &rpc2}, {3, &rpc3}}, nullptr, nullptr, 150, 200};
   auto raft = RaftState::NewRaftState(config);
   raft->SetRole(kFollower);
 
@@ -383,7 +380,7 @@ TEST_F(RaftElectionTest, TestBecomeLeaderIfWinMajorityReply) {
   RpcClientMock::AppendEntriesMsgChannel channel2;
   RpcClientMock rpc2(&channel1, &channel2);
   RpcClientMock rpc3(&channel1, &channel2);
-  RaftConfig config = {1, {{1, nullptr}, {2, &rpc2}, {3, &rpc3}}, nullptr, 150, 200};
+  RaftConfig config = {1, {{1, nullptr}, {2, &rpc2}, {3, &rpc3}}, nullptr, nullptr, 150, 200};
   auto raft = RaftState::NewRaftState(config);
   raft->SetRole(kFollower);
 
@@ -405,8 +402,7 @@ TEST_F(RaftElectionTest, TestBecomeLeaderIfWinMajorityReply) {
   ASSERT_EQ(raft->CurrentTerm(), 1);
 
   // Check if heartbeat messages are sent correctly
-  auto ref_appendentries_args =
-      AppendEntriesArgs{1, 1, 0, 0, 0, 0, 0, std::vector<LogEntry>()};
+  auto ref_appendentries_args = AppendEntriesArgs{1, 1, 0, 0, 0, 0, 0, std::vector<LogEntry>()};
 
   for (const auto &entry : channel2) {
     ASSERT_TRUE(AppendEntriesArgsEqual(ref_appendentries_args, entry));
@@ -418,7 +414,7 @@ TEST_F(RaftElectionTest, TestConvertToFollowerIfFindHigherTerm) {
   RpcClientMock::AppendEntriesMsgChannel channel2;
   RpcClientMock rpc2(&channel1, &channel2);
   RpcClientMock rpc3(&channel1, &channel2);
-  RaftConfig config = {1, {{1, nullptr}, {2, &rpc2}, {3, &rpc3}}, nullptr, 150, 200};
+  RaftConfig config = {1, {{1, nullptr}, {2, &rpc2}, {3, &rpc3}}, nullptr, nullptr, 150, 200};
   auto raft = RaftState::NewRaftState(config);
   raft->SetRole(kFollower);
 

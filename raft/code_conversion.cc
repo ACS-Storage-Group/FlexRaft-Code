@@ -437,8 +437,8 @@ void CodeConversionManagement::AdjustChunkDistribution(const ChunkDistribution& 
   EncodeReservedChunksAndAssignToNode(cd);
 }
 
-void CodeConversionManagement::UpdateOrgChunkResponseInfo(raft_node_id_t node_id) {
-  org_chunk_response_[node_id] = true;
+void CodeConversionManagement::UpdateOrgChunkResponseInfo(raft_node_id_t node_id, bool t) {
+  org_chunk_response_[node_id] = t;
 }
 
 };  // namespace CODE_CONVERSION_NAMESPACE

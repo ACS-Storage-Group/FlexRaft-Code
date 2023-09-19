@@ -55,6 +55,7 @@ RaftState *RaftState::NewRaftState(const RaftConfig &config) {
 
   // Construct log manager from persistence storage
   ret->lm_ = LogManager::NewLogManager(config.storage);
+  ret->reserve_lm_ = LogManager::NewLogManager(config.reserve_storage);
 
   LOG(util::kRaft, "S%d Log Recover from storage LI%d", ret->id_, ret->lm_->LastLogEntryIndex());
 
@@ -392,6 +393,11 @@ void RaftState::ProcessCodeConversion(AppendEntriesReply *reply) {
     // committed !!!!
     for (const auto &ci : reply->chunk_infos) {
       auto raft_index = ci.GetRaftIndex();
+      auto ccm = cc_managment_[raft_index];
+      ccm->UpdateOrgChunkResponseInfo(reply->reply_id, ci.contain_original);
+      LOG(util::kRaft, "[CC] S%d Update S%d Contain Original Data: %d", id_, peer_id,
+          ci.contain_original);
+
       if (node->matchChunkInfo.count(raft_index) == 0 ||
           ci.GetK() < node->matchChunkInfo[raft_index].GetK()) {
         node->matchChunkInfo[raft_index] = ci;
@@ -545,6 +551,8 @@ void RaftState::Process(RequestFragmentsReply *reply) {
   return;
 }
 
+// We have changed the Propose implementation of RaftState to use the CodeConversion version
+// of ReplicateNewProposeEntry.
 ProposeResult RaftState::Propose(const CommandData &command) {
   std::scoped_lock<std::mutex> lck(mtx_);
 
@@ -576,6 +584,7 @@ ProposeResult RaftState::Propose(const CommandData &command) {
   /// !!!! For Code Conversion: Use the Replication scheme of Code Version !!!!
   ReplicateNewProposeEntryCodeConversion(entry.Index());
 
+  // Note that it's not necessary for leader to persist the reserved chunks
   if (storage_ != nullptr) {
     LOG(util::kRaft, "S%d Starts Persisting Propose Entry(I%d)", id_, entry.Index());
     storage_->AppendEntry(entry);
@@ -862,6 +871,30 @@ void RaftState::tryApplyLogEntries() {
   }
 }
 
+void RaftState::tryApplyLogEntriesCodeConversion() {
+  while (last_applied_ < commit_index_) {
+    auto old_apply_idx = last_applied_;
+
+    // apply this message on state machine:
+    if (rsm_ != nullptr) {
+      LogEntry ent, reserved_ent;
+      auto stat = lm_->GetEntryObject(last_applied_ + 1, &ent);
+      assert(stat == kOk);
+
+      stat = reserve_lm_->GetEntryObject(last_applied_ + 1, &reserved_ent);
+      assert(stat == kOk);
+
+      // Combine both the original ChunkVector and reserved ChunkVector
+      ent.SetReservedChunkVector(reserved_ent.GetReservedChunkVector());
+
+      rsm_->ApplyLogEntry(ent);
+      LOG(util::kRaft, "[CC] S%d Push ent(I%d T%d) to channel", id_, ent.Index(), ent.Term());
+    }
+    last_applied_ += 1;
+    LOG(util::kRaft, "[CC] S%d APPLY(%d->%d)", id_, old_apply_idx, last_applied_);
+  }
+}
+
 void RaftState::convertToFollower(raft_term_t term) {
   // This assertion ensures that the server will only convert to follower with
   // higher term. i.e. The term attribute in followre is monotonically
@@ -898,7 +931,7 @@ void RaftState::convertToLeader() {
 
   broadcastHeartbeat();
   resetHeartbeatTimer();
-  resetReplicateTimer();
+  resetReplicationTimer();
 }
 
 void RaftState::convertToPreLeader() {
@@ -1021,7 +1054,6 @@ void RaftState::collectFragments() {
   args.leader_id = id_;
   args.start_index = recover_start_index;
   args.last_index = lm_->LastLogEntryIndex();
-  //
   for (auto id : peers_) {
     if (id == id_) {
       continue;
@@ -1046,7 +1078,7 @@ void RaftState::resetElectionTimer() {
 
 void RaftState::resetHeartbeatTimer() { heartbeat_timer_.Reset(); }
 void RaftState::resetPreLeaderTimer() { preleader_timer_.Reset(); }
-void RaftState::resetReplicateTimer() { replicate_timer_.Reset(); }
+void RaftState::resetReplicationTimer() { replicate_timer_.Reset(); }
 
 void RaftState::Tick() {
   std::scoped_lock<std::mutex> lck(mtx_);
@@ -1093,8 +1125,8 @@ void RaftState::tickOnLeader() {
     resetHeartbeatTimer();
   }
   if (replicate_timer_.ElapseMilliseconds() >= config::kReplicateInterval) {
-    ReplicateEntries();
-    resetReplicateTimer();
+    ReplicateEntriesCodeConversion();
+    resetReplicationTimer();
   }
 }
 
@@ -1186,7 +1218,8 @@ void RaftState::EncodeRaftEntryForCodeConversion(
 }
 
 void RaftState::AdjustChunkDistributionCodeConversion(raft_index_t raft_index,
-                                                      const std::vector<bool> &live_vec) {
+                                                      const std::vector<bool> &live_vec,
+                                                      raft_encoding_param_t code_conversion_k) {
   LOG(util::kRaft, "S%d Adjust ChunkDistributionForCodeConversion: %s", id_,
       util::ToString(live_vec).c_str());
 
@@ -1199,6 +1232,7 @@ void RaftState::AdjustChunkDistributionCodeConversion(raft_index_t raft_index,
   ccm->AdjustChunkDistribution(live_vec);
 
   for (int i = 0; i < live_vec.size(); ++i) {
+    stripe->fragments[i].SetChunkInfo(ChunkInfo{code_conversion_k, raft_index, false});
     stripe->fragments[i].SetOriginalChunkVector(ccm->GetOriginalChunkVector(i));
     stripe->fragments[i].SetReservedChunkVector(ccm->GetReservedChunkVector(i));
   }
@@ -1292,6 +1326,8 @@ void RaftState::ReplicateNewProposeEntryCodeConversion(raft_index_t raft_index) 
   cc_managment_.insert_or_assign(raft_index, ccm);
 
   MaybeAdjustDistributionAndReplicate(live_vec);
+
+  resetReplicationTimer();
 }
 
 void RaftState::ReplicateNewProposeEntry(raft_index_t raft_index) {
@@ -1346,7 +1382,7 @@ void RaftState::ReplicateNewProposeEntry(raft_index_t raft_index) {
   }
 
   // Reset replication timer
-  resetReplicateTimer();
+  resetReplicationTimer();
 }
 
 void RaftState::ReplicateEntries() {
@@ -1366,6 +1402,22 @@ void RaftState::ReplicateEntries() {
         } else {
           sendHeartBeat(peer_id);
         }
+      }
+    }
+  }
+}
+
+void RaftState::ReplicateEntriesCodeConversion() {
+  LOG(util::kRaft, "[CC] S%d ReplicateEntries()", id_);
+  auto live_vec = live_monitor_.GetLivenessVector();
+  LOG(util::kRaft, "[CC] S%d Get Current LiveVec: %s", id_, util::ToString(live_vec).c_str());
+  MaybeAdjustDistributionAndReplicate(live_vec);
+  for (auto peer_id : peers_) {
+    if (peer_id != id_) {
+      if (live_monitor_.IsAlive(peer_id)) {
+        sendAppendEntriesCodeConversion(peer_id);
+      } else {
+        sendHeartBeat(peer_id);
       }
     }
   }
@@ -1417,8 +1469,17 @@ void RaftState::MaybeAdjustDistributionAndReplicate(const std::vector<bool> &liv
 
   // For each uncommitted entry, adjust their Chunk storage distribution
   auto last_index = lm_->LastLogEntryIndex();
+  int alive_num = 0;
+  for (const auto &b : live_vec) {
+    alive_num += b;
+  }
+
+  raft_encoding_param_t code_conversion_k = alive_num - livenessLevel();
+
   for (auto raft_index = CommitIndex() + 1; raft_index <= last_index; ++raft_index) {
-    AdjustChunkDistributionCodeConversion(raft_index, live_vec);
+    AdjustChunkDistributionCodeConversion(raft_index, live_vec, code_conversion_k);
+    UpdateLastEncodingK(raft_index, code_conversion_k);
+    LOG(util::kRaft, "[CC] S%d UPDATE Last Encoding K to: %u", id_, code_conversion_k);
   }
 
   // Step2: replicate all uncommitted entries by reversing NextIndex and MatchIndex
@@ -1610,7 +1671,7 @@ void RaftState::sendAppendEntriesCodeConversion(raft_node_id_t peer) {
   auto require_entry_cnt = lm_->LastLogEntryIndex() - prev_index;
   args.entries.reserve(require_entry_cnt);
 
-  for (auto raft_index = next_index; raft_index < lm_->LastLogEntryIndex(); ++raft_index) {
+  for (auto raft_index = next_index; raft_index <= lm_->LastLogEntryIndex(); ++raft_index) {
     args.entries.push_back(encoded_stripe_[raft_index]->fragments[peer]);
     auto ccm = cc_managment_[raft_index];
     // Avoid resending original chunks if these chunks have been replicated for last round

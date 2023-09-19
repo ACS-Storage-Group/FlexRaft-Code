@@ -12,7 +12,10 @@
 #include <utility>
 #include <vector>
 
+#include "chunk.h"
+#include "code_conversion.h"
 #include "encoder.h"
+#include "gtest/gtest.h"
 #include "log_entry.h"
 #include "raft.h"
 #include "raft_node.h"
@@ -22,14 +25,13 @@
 #include "rsm.h"
 #include "storage.h"
 #include "util.h"
-#include "gtest/gtest.h"
 
 #define CONFLICT_TERM -2
 
 namespace raft {
 // A bunch of basic test framework
 class RaftNodeTest : public ::testing::Test {
-public:
+ public:
   static constexpr int kMaxNodeNum = 9;
   static constexpr raft_node_id_t kNoLeader = -1;
   static constexpr int kCommandDataLength = 1024;
@@ -49,10 +51,8 @@ public:
     // (index, term) uniquely identify an entry
     using CommitResult = std::pair<raft_term_t, int>;
 
-  public:
-    void ApplyLogEntry(LogEntry ent) override {
-      applied_entries_.insert({ent.Index(), ent});
-    }
+   public:
+    void ApplyLogEntry(LogEntry ent) override { applied_entries_.insert({ent.Index(), ent}); }
 
     // Return the applied entry at particular index, return true if there is
     // such an index, otherwise returns false
@@ -64,7 +64,7 @@ public:
       return true;
     }
 
-  private:
+   private:
     std::unordered_map<raft_index_t, LogEntry> applied_entries_;
   };
 
@@ -101,8 +101,7 @@ public:
     node_num_ = nodes_config.size();
     NetConfig net_config = GetNetConfigFromNodesConfig(nodes_config);
     for (const auto &[id, config] : nodes_config) {
-      LaunchRaftNodeInstance(
-          {id, net_config, config.storage_name, new RsmMock});
+      LaunchRaftNodeInstance({id, net_config, config.storage_name, new RsmMock});
     }
   }
 
@@ -118,18 +117,25 @@ public:
 
   bool CheckNoLeader() {
     bool has_leader = false;
-    std::for_each(nodes_, nodes_ + node_num_, [&](RaftNode *node) {
-      has_leader |= (node->getRaftState()->Role() == kLeader);
-    });
+    std::for_each(nodes_, nodes_ + node_num_,
+                  [&](RaftNode *node) { has_leader |= (node->getRaftState()->Role() == kLeader); });
     return has_leader == false;
   }
 
   CommandData ConstructCommandFromValue(int val) {
-    auto data = new char[kCommandDataLength + 10];
+    // The maximum number of node we use in this test is: 7
+    static const int kMaxNodeNum = 7;
+    static const int kMaxK = kMaxNodeNum - kMaxNodeNum / 2;
+    static auto chunk_count = raft::code_conversion::get_chunk_count(kMaxK);
+
+    // The first 4 bytes are non-encoded data
+    static int kCmdSize = chunk_count * 128 + sizeof(int);
+
+    auto data = new char[kCmdSize];
     *reinterpret_cast<int *>(data) = val;
     // For more strict test on encoding/decoding
-    *reinterpret_cast<int *>(data + kCommandDataLength - 4) = val;
-    return CommandData{sizeof(int), Slice(data, kCommandDataLength)};
+    *reinterpret_cast<int *>(data + kCmdSize - 4) = val;
+    return CommandData{sizeof(int), Slice(data, kCmdSize)};
   }
 
   // Check that at every fixed term, there is and there is only one leader alive
@@ -142,8 +148,7 @@ public:
     auto record = [&](RaftNode *node) {
       if (!node->IsDisconnected()) {
         auto raft_state = node->getRaftState();
-        leader_cnt[raft_state->CurrentTerm()] +=
-            (raft_state->Role() == kLeader);
+        leader_cnt[raft_state->CurrentTerm()] += (raft_state->Role() == kLeader);
       }
     };
     for (int i = 0; i < retry_cnt; ++i) {
@@ -168,14 +173,14 @@ public:
 
   // Where is a majority servers alive in cluster, it's feasible to propose one
   // entry and reach an agreement among these servers
-  bool ProposeOneEntry(int value) {
+  bool ProposeOneEntry(int value, bool cc = false) {
     const int retry_cnt = 20;
 
     for (int run = 0; run < retry_cnt; ++run) {
       raft_node_id_t leader_id = kNoLeader;
       ProposeResult propose_result;
       auto cmd = ConstructCommandFromValue(value);
-      for (int i = 0; i < node_num_; ++i) { // Search for a leader
+      for (int i = 0; i < node_num_; ++i) {  // Search for a leader
         if (!Alive(i)) {
           continue;
         }
@@ -192,22 +197,17 @@ public:
         // Wait this entry to be committed
         assert(propose_result.propose_index > 0);
 
-        // Retry 10 times
+        // Try 10 times to check if an entry is successfully committed
         for (int run2 = 0; run2 < 10; ++run2) {
-          bool succ = checkCommitted(propose_result, value);
+          // We ingest a branch here to minimize code modification
+          bool succ = !cc ? checkCommitted(propose_result, value)
+                          : checkCommittedCodeConversion(propose_result, value);
           if (succ) {
             LOG(util::kRaft, "[SUCC] Check Value Done: %d", value);
             return true;
           } else {
             sleepMs(20);
           }
-          // if (val == CONFLICT_TERM) {
-          //   break;
-          // } else if (val == -1) {
-          // } else {
-          //   LOG(util::kRaft, "Check Propose value: Expect %d Get %d", value,
-          //   val); return val == value;
-          // }
         }
       }
       LOG(util::kRaft, "[FAILED] Wait a propose entry to be committed");
@@ -218,9 +218,7 @@ public:
     return false;
   }
 
-  void sleepMs(int num) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(num));
-  }
+  void sleepMs(int num) { std::this_thread::sleep_for(std::chrono::milliseconds(num)); }
 
   // Check if propose_val has been committed and applied, return true if
   // committed and applied, i.e. we can read the applied fragments from
@@ -243,8 +241,7 @@ public:
           }
           if (ent.Type() == kFragments) {
             // Note that i is identical to the fragment id
-            collected_res.insert_or_assign(static_cast<raft_frag_id_t>(i),
-                                           ent.FragmentSlice());
+            collected_res.insert_or_assign(static_cast<raft_frag_id_t>(i), ent.FragmentSlice());
             decode_k = std::min(decode_k, ent.GetChunkInfo().GetK());
             LOG(util::kRaft, "Update DecodeK=%d", decode_k);
           }
@@ -276,8 +273,70 @@ public:
     }
     LOG(util::kRaft, "Decode Results: size=%d Tail Value=%d", res.size(),
         *(int *)(res.data() + res.size() - 4));
+    auto val_tail = *reinterpret_cast<int *>(res.data() + kCommandDataLength - 8);
+    EXPECT_EQ(propose_val, val_tail);
+    if (propose_val != val_tail) {
+      return false;
+    }
+    return true;
+  }
+
+  // The version that RaftState enables using CodeConversion to execute
+  bool checkCommittedCodeConversion(const ProposeResult &propose_result, int propose_val) {
+    Stripe stripe;
+    int alive_number = 0;
+    raft_encoding_param_t decode_k = node_num_ - node_num_ / 2;
+    // Encoder::EncodingResults collected_res;
+    // The input data
+    std::map<raft_node_id_t, CODE_CONVERSION_NAMESPACE::ChunkVector> collected_cv;
+    for (int i = 0; i < node_num_; ++i) {
+      if (Alive(i)) {
+        alive_number += 1;
+        auto rsm = reinterpret_cast<RsmMock *>(nodes_[i]->getRsm());
+        auto raft = nodes_[i]->getRaftState();
+        if (raft->CommitIndex() >= propose_result.propose_index) {
+          LogEntry ent;
+          auto stat = rsm->getEntry(propose_result.propose_index, &ent);
+          if (ent.Term() != propose_result.propose_term) {
+            continue;
+          }
+          // To test, we only gather that are of fragments. Collecting the full entry data committed
+          // by Raft leader is meaningless in our test.
+          if (ent.Type() == kFragments) {
+            collected_cv.insert_or_assign(i, ent.GetConcatenatedChunkVector());
+            LOG(util::kRaft, "[CC] Update DecodeK=%d", decode_k);
+          }
+        }
+      }
+    }
+
+    // Correct encoding parameter k and m
+    int k = decode_k;
+    int F = node_num_ / 2;
+    int r = CODE_CONVERSION_NAMESPACE::get_chunk_count(k) / k;
+    CODE_CONVERSION_NAMESPACE::CodeConversionManagement ccm(k, F, r);
+    Slice recover_res_slice;
+
+    // No fragment collected: this entry is not committed yet
+    if (collected_cv.size() == 0) {
+      return false;
+    }
+
+    // Dump all contents of fragments
+    for (const auto &[id, cv] : collected_cv) {
+      LOG(util::kRaft, "[CC] Collect ChunkVector(%d) from S%d", cv.size(), id);
+    }
+
+    // Failed ChunkVector recovering
+    auto recover_stat = ccm.DecodeCollectedChunkVec(collected_cv, &recover_res_slice);
+    if (!recover_stat) {
+      LOG(util::kRaft, "[CC] [FAILED] Recover Collected ChunkVector");
+      return false;
+    }
+    LOG(util::kRaft, "[CC] Decode Results: size=%d Tail Value=%d", recover_res_slice.size(),
+        *(int *)(recover_res_slice.data() + recover_res_slice.size() - 4));
     auto val_tail =
-        *reinterpret_cast<int *>(res.data() + kCommandDataLength - 8);
+        *reinterpret_cast<int *>(recover_res_slice.data() + recover_res_slice.size() - 4);
     EXPECT_EQ(propose_val, val_tail);
     if (propose_val != val_tail) {
       return false;
@@ -288,8 +347,7 @@ public:
   int LivenessLevel() const { return node_num_ / 2; }
 
   bool Alive(int i) {
-    return nodes_[i] != nullptr && !nodes_[i]->Exited() &&
-           !nodes_[i]->IsDisconnected();
+    return nodes_[i] != nullptr && !nodes_[i]->Exited() && !nodes_[i]->IsDisconnected();
   }
 
   // Find current leader and returns its associated node id, if there is
@@ -335,8 +393,7 @@ public:
         node->Exit();
       }
     });
-    std::for_each(nodes_, nodes_ + node_num_,
-                  [](RaftNode *node) { delete node; });
+    std::for_each(nodes_, nodes_ + node_num_, [](RaftNode *node) { delete node; });
   }
 
   void ClearTestContext(const NodesConfig &nodes_config) {
@@ -347,9 +404,8 @@ public:
       }
     };
     std::for_each(nodes_, nodes_ + node_num_, cmp);
-    // Make sure all ticker threads have exited 
-    std::this_thread::sleep_for(
-        std::chrono::milliseconds(config::kRaftTickBaseInterval * 2));
+    // Make sure all ticker threads have exited
+    std::this_thread::sleep_for(std::chrono::milliseconds(config::kRaftTickBaseInterval * 2));
     for (int i = 0; i < node_num_; ++i) {
       delete nodes_[i];
     }
@@ -363,9 +419,9 @@ public:
     }
   }
 
-public:
+ public:
   // Record each nodes and all nodes number
   RaftNode *nodes_[kMaxNodeNum];
   int node_num_;
 };
-} // namespace raft
+}  // namespace raft

@@ -46,8 +46,11 @@ RCF::ByteBuffer RaftRPCService::AppendEntries(const RCF::ByteBuffer &arg_buf) {
 #endif
 
   if (raft_ != nullptr) {
+    // Change to use the CodeConversion version of processing AppendEntriesArgs
+
     // auto start = util::NowTime();
-    raft_->Process(&args, &reply);
+    // raft_->Process(&args, &reply);
+    raft_->ProcessCodeConversion(&args, &reply);
     // auto end = util::NowTime();
     // auto dura = util::DurationToMicros(start, end);
     // printf("Process Time: %" PRIu64"\n", dura);
@@ -135,16 +138,8 @@ void RCFRpcClient::sendMessage(const AppendEntriesArgs &args) {
 #endif
 
   auto cmp_callback = [=]() {
-    /*
-    #ifdef ENABLE_PERF_RECORDING
-        onAppendEntriesCompleteRecordTimer(ret, client_ptr, this->raft_,
-    this->id_, counter); #else
-    */
     onAppendEntriesComplete(ret, client_ptr, this->raft_, this->id_,
                             {arg_buf.getLength(), start_time}, &(this->recorder_));
-    /*
-    #endif
-    */
   };
   ret = client_ptr->AppendEntries(RCF::AsyncTwoway(cmp_callback), arg_buf);
 }
@@ -199,7 +194,9 @@ void RCFRpcClient::onAppendEntriesComplete(RCF::Future<RCF::ByteBuffer> ret, Cli
     AppendEntriesReply reply;
     Serializer::NewSerializer().Deserialize(&ret_buf, &reply);
     if (raft != nullptr) {
-      raft->Process(&reply);
+      // Use the CodeConversion version of Processing AppendEntriesReply
+      // raft->Process(&reply);
+      raft->ProcessCodeConversion(&reply);
     }
 
     // Only record stat that is not heartbeat messages
@@ -226,7 +223,9 @@ void RCFRpcClient::onAppendEntriesCompleteRecordTimer(RCF::Future<RCF::ByteBuffe
     RCF::ByteBuffer ret_buf = *ret;
     AppendEntriesReply reply;
     Serializer::NewSerializer().Deserialize(&ret_buf, &reply);
-    raft->Process(&reply);
+    // raft->Process(&reply);
+    // Change to use the CodeConversion version
+    raft->ProcessCodeConversion(&reply);
   }
 }
 
