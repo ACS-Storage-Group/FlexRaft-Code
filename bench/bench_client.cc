@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "chunk.h"
 #include "client.h"
 #include "config.h"
 #include "kv_node.h"
@@ -74,11 +75,17 @@ AnalysisResults Analysis(const std::vector<OperationStat> &collected_data) {
                          apply_latency_sum / collected_data.size()};
 }
 
+int round_up(int sz, int div) { return ((sz - 1) / div + 1) * div; }
+
 void BuildBench(const BenchConfiguration &cfg, std::vector<KvPair> *bench) {
   const std::string value_suffix(cfg.bench_put_size, 0);
+  const int K = 4;
+  const int chunk_cnt = raft::code_conversion::get_chunk_count(K);
+  auto val_sz = round_up(cfg.bench_put_size, chunk_cnt);
   for (int i = 1; i <= cfg.bench_put_cnt; ++i) {
     auto key = cfg.key_prefix + std::to_string(i);
-    auto val = cfg.value_prefix + std::to_string(i) + value_suffix;
+    auto val = cfg.value_prefix + std::to_string(i);
+    val.append(val_sz - val.size(), '0');
     bench->push_back({key, val});
   }
 }
