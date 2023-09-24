@@ -21,7 +21,7 @@ RaftNode::RaftNode(const NodeConfig &node_config)
   if (node_config.storage_filename != "") {
     storage_ = FileStorage::Open(node_config.storage_filename);
     // Temporarily set the reserve_storage to be nullptr
-    reserve_storage_ = nullptr;
+    reserve_storage_ = FileStorage::Open(node_config.storage_filename + ".reserve");
   } else {
     storage_ = nullptr;
     // Temporarily set reserve_storage to be nullptr
