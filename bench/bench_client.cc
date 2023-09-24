@@ -26,6 +26,9 @@ DEFINE_int32(write_num, 0, "The number of write operations to execute");
 using KvPair = std::pair<std::string, std::string>;
 const int kVerboseInterval = 100;
 
+const int K = 4;
+const int chunk_cnt = raft::code_conversion::get_chunk_count(K);
+
 struct BenchConfiguration {
   std::string key_prefix;
   std::string value_prefix;
@@ -78,9 +81,6 @@ AnalysisResults Analysis(const std::vector<OperationStat> &collected_data) {
 int round_up(int sz, int div) { return ((sz - 1) / div + 1) * div; }
 
 void BuildBench(const BenchConfiguration &cfg, std::vector<KvPair> *bench) {
-  const std::string value_suffix(cfg.bench_put_size, 0);
-  const int K = 4;
-  const int chunk_cnt = raft::code_conversion::get_chunk_count(K);
   auto val_sz = round_up(cfg.bench_put_size, chunk_cnt);
   for (int i = 1; i <= cfg.bench_put_cnt; ++i) {
     auto key = cfg.key_prefix + std::to_string(i);
