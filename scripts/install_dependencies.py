@@ -74,7 +74,7 @@ def install_nasm_assembler():
 
 def install_libisal():
     subprocess.run("rm -rf isa-l", shell=True)
-    subprocess.run("git clone https://github.com/intel/isa-l.git", shell=True)
+    subprocess.run("git clone https://github.com/intel/isa-l.git -b v2.30.0", shell=True)
     os.chdir("isa-l")
     subprocess.run("./autogen.sh", shell=True)
     subprocess.run("./configure", shell=True)
