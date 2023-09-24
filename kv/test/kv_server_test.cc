@@ -276,6 +276,22 @@ class KvServerTest : public ::testing::Test {
     return ret;
   }
 
+  void DoBatchWrite(int l, int r, const std::string &key_prefix, const std::string &value) {
+    for (int i = l; i <= r; ++i) {
+      auto key = key_prefix + std::to_string(i);
+      ASSERT_EQ(Put(key, value), kOk);
+    }
+  }
+
+  void DoBatchGetAndCheck(int l, int r, const std::string &key_prefix,
+                          const std::string &check_val) {
+    std::string get_value;
+    for (int i = l; i <= r; ++i) {
+      ASSERT_EQ(Get(key_prefix + std::to_string(i), &get_value), kOk);
+      ASSERT_EQ(check_val, get_value);
+    }
+  }
+
  public:
   void Disconnect(raft::raft_node_id_t id) { servers_[id]->Disconnect(); }
   void Reconnect(raft::raft_node_id_t id) { servers_[id]->Reconnect(); }
@@ -289,34 +305,37 @@ class KvServerTest : public ::testing::Test {
 };
 
 TEST_F(KvServerTest, TestSimplePutAndGet) {
+  const int K = 4;
+  const std::string key_prefix = "key";
+  const int kTestCnt = 1000;
+
   // Startup a cluster with 7 servers
   auto servers_config = ConstructKVServerConfigs(7);
-
-  const int K = 4;
-  auto t = raft::CODE_CONVERSION_NAMESPACE::get_chunk_count(K);
-
   LaunchAllServers(servers_config);
 
-  const std::string key_prefix = "key";
-
+  auto t = raft::CODE_CONVERSION_NAMESPACE::get_chunk_count(K);
   std::string value = ConstructValue(t);
-  const int test_cnt = 1000;
 
-  for (int i = 1; i <= test_cnt; ++i) {
-    auto key = key_prefix + std::to_string(i);
-    EXPECT_EQ(Put(key, value), kOk);
-  }
-
+  DoBatchWrite(1, kTestCnt, key_prefix, value);
   sleepMs(1000);  // Wait leader broadcast the commit index
-  // auto leader1 = GetCurrentLeaderId();
-  // Disconnect(leader1);
+  DoBatchGetAndCheck(1, kTestCnt, key_prefix, value);
 
-  std::string get_value;
-  for (int i = 1; i <= test_cnt; ++i) {
-    EXPECT_EQ(Get(key_prefix + std::to_string(i), &get_value), kOk);
-    EXPECT_EQ(value, get_value);
-  }
+  // TEST CASE 2: Test when there is one follower down:
+  auto leader = GetCurrentLeaderId();
+  Disconnect((leader + 1) % node_num_);
 
+  DoBatchWrite(kTestCnt, 2 * kTestCnt, key_prefix, value);
+  sleepMs(1000);  // Wait leader broadcast the commit index
+  DoBatchGetAndCheck(kTestCnt, 2 * kTestCnt, key_prefix, value);
+
+  // TEST CASE 2: Test when there are two followers down:
+  Disconnect((leader + 2) % node_num_);
+
+  DoBatchWrite(2 * kTestCnt, 3 * kTestCnt, key_prefix, value);
+  sleepMs(1000);  // Wait leader broadcast the commit index
+  DoBatchGetAndCheck(2 * kTestCnt, 3 * kTestCnt, key_prefix, value);
+
+  // TEST CASE 3: Test when there is another follower down:
   ClearTestContext(servers_config);
 }
 
