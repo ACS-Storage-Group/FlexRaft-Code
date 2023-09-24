@@ -4,6 +4,7 @@
 #include <cstring>
 
 #include "raft_type.h"
+#include "serializer.h"
 #include "type.h"
 #include "util.h"
 
@@ -74,6 +75,47 @@ void RaftEntryToRequest(const raft::LogEntry &ent, Request *request, raft::raft_
 
     // Append the value contents
     request->value.append(ent.FragmentSlice().data(), ent.FragmentSlice().size());
+  }
+}
+
+void RaftEntryToRequestCodeConversion(const raft::LogEntry &ent, Request *request,
+                                      raft::raft_node_id_t server_id, int server_num) {
+  char hdr_data[12];
+  *(int *)hdr_data = ent.Type() == raft::kNormal ? 1 : ent.GetChunkInfo().GetK();
+  *(int *)(hdr_data + 4) = ent.Type() == raft::kNormal ? 0 : server_num - ent.GetChunkInfo().GetK();
+  *(int *)(hdr_data + 8) = ent.Type() == raft::kNormal ? 0 : (int)server_id;
+  request->value.append(hdr_data, 12);
+
+  if (ent.Type() == raft::kNormal) {
+    auto bytes = ent.CommandData().data();
+    std::memcpy(request, bytes, RequestHdrSize());
+
+    bytes = GetKeyFromPrefixLengthFormat(bytes + RequestHdrSize(), &(request->key));
+
+    LOG(raft::util::kRaft, "[CC] RaftEnt To Request: Normal");
+
+    // value would be the prefix length key format
+    auto remaining_size = ent.CommandData().size() - (bytes - ent.CommandData().data());
+    request->value.append(bytes, remaining_size);
+  } else {
+    // construct the header and key
+    std::memcpy(request, ent.NotEncodedSlice().data(), RequestHdrSize());
+    auto key_data = ent.NotEncodedSlice().data() + RequestHdrSize();
+    GetKeyFromPrefixLengthFormat(key_data, &(request->key));
+
+    // Construct the value, in the following format:
+    // k, m, fragment_id, value_contents
+    // The value_contents is the serialized ChunkVector (of both original part and reserved part)
+
+    auto cv = ent.GetOriginalChunkVector();
+    cv.Concatenate(ent.GetReservedChunkVector());
+
+    // Append the serialized CV contents
+    auto slice = cv.Serialize();
+    request->value.append(slice.data(), slice.size());
+    delete slice.data();
+
+    LOG(raft::util::kRaft, "[CC] RaftEnt To Request: ChunkVector Size=%d", cv.size());
   }
 }
 

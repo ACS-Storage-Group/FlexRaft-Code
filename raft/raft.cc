@@ -64,6 +64,7 @@ RaftState *RaftState::NewRaftState(const RaftConfig &config) {
   ret->rsm_ = config.rsm;
   ret->heartbeatTimeInterval = config::kHeartbeatInterval;
   ret->storage_ = config.storage;  // might be nullptr
+  ret->reserve_storage_ = config.reserve_storage;   // might be nullptr
 
   ret->last_applied_ = 0;
   ret->commit_index_ = 0;

@@ -32,7 +32,7 @@ TEST_F(RaftNodeBasicTest, DISABLED_TestSimplyProposeEntry) {
 }
 
 // Test one follower fail
-TEST_F(RaftNodeBasicTest, TestFollowersCrash) {
+TEST_F(RaftNodeBasicTest, TestOneFollowerCrash) {
   auto config = ConstructNodesConfig(7, false);
   LaunchAllServers(config);
   sleepMs(10);
@@ -45,6 +45,37 @@ TEST_F(RaftNodeBasicTest, TestFollowersCrash) {
   EXPECT_TRUE(ProposeOneEntry(1, true));
   EXPECT_TRUE(ProposeOneEntry(2, true));
   EXPECT_TRUE(ProposeOneEntry(3, true));
+
+  // Randomly disable another two follows:
+  Disconnect((leader + 2) % node_num_);
+  Disconnect((leader + 3) % node_num_);
+  EXPECT_TRUE(checkCommittedCodeConversion({1, 1, true}, 1));
+  EXPECT_TRUE(checkCommittedCodeConversion({2, 1, true}, 2));
+  EXPECT_TRUE(checkCommittedCodeConversion({3, 1, true}, 3));
+
+  ClearTestContext(config);
+}
+
+TEST_F(RaftNodeBasicTest, TestTwoFollowersCrash) {
+  auto config = ConstructNodesConfig(7, false);
+  LaunchAllServers(config);
+  sleepMs(10);
+
+  // Disconnect a follower
+  auto leader = GetLeaderId();
+  Disconnect((leader + 1) % node_num_);
+  Disconnect((leader + 2) % node_num_);
+
+  // Propose and check data
+  EXPECT_TRUE(ProposeOneEntry(1, true));
+  EXPECT_TRUE(ProposeOneEntry(2, true));
+  EXPECT_TRUE(ProposeOneEntry(3, true));
+
+  // Randomly disable another two follows:
+  Disconnect((leader + 3) % node_num_);
+  EXPECT_TRUE(checkCommittedCodeConversion({1, 1, true}, 1));
+  EXPECT_TRUE(checkCommittedCodeConversion({2, 1, true}, 2));
+  EXPECT_TRUE(checkCommittedCodeConversion({3, 1, true}, 3));
 
   ClearTestContext(config);
 }

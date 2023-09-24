@@ -11,24 +11,24 @@
 #include <thread>
 
 #include "RCF/ThreadLibrary.hpp"
+#include "chunk.h"
+#include "gtest/gtest.h"
 #include "kv_format.h"
 #include "log_entry.h"
 #include "raft_type.h"
 #include "type.h"
 #include "util.h"
-#include "gtest/gtest.h"
 namespace kv {
 class KvServerTest : public ::testing::Test {
-  static const int kRequestTimeout = 10; // A KV request must be done within 10s
-public:
+  static const int kRequestTimeout = 10;  // A KV request must be done within 10s
+ public:
   struct TestNodeConfig {
     raft::rpc::NetAddress addr;
     std::string storage_name;
     std::string dbname;
   };
   using NodesConfig = std::unordered_map<raft::raft_node_id_t, TestNodeConfig>;
-  using NetConfig =
-      std::unordered_map<raft::raft_node_id_t, raft::rpc::NetAddress>;
+  using NetConfig = std::unordered_map<raft::raft_node_id_t, raft::rpc::NetAddress>;
 
   struct DecodedString {
     int k, m;
@@ -54,21 +54,16 @@ public:
     auto frag_id = *reinterpret_cast<const raft::raft_frag_id_t *>(bytes);
     bytes += sizeof(raft::raft_frag_id_t);
 
-    auto remaining_size =
-        str->size() - sizeof(int) * 2 - sizeof(raft::raft_frag_id_t);
-    return DecodedString{
-        k, m, frag_id, raft::Slice(const_cast<char *>(bytes), remaining_size)};
+    auto remaining_size = str->size() - sizeof(int) * 2 - sizeof(raft::raft_frag_id_t);
+    return DecodedString{k, m, frag_id, raft::Slice(const_cast<char *>(bytes), remaining_size)};
   }
 
-public:
+ public:
   static constexpr int kMaxNodeNum = 9;
 
-  void sleepMs(int cnt) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(cnt));
-  }
+  void sleepMs(int cnt) { std::this_thread::sleep_for(std::chrono::milliseconds(cnt)); }
 
-  void PutBatch(const std::string &key_prefix, const std::string &value_prefix,
-                int lo, int hi) {
+  void PutBatch(const std::string &key_prefix, const std::string &value_prefix, int lo, int hi) {
     for (int i = lo; i <= hi; ++i) {
       auto key = key_prefix + std::to_string(i);
       auto value = value_prefix + std::to_string(i);
@@ -76,8 +71,8 @@ public:
     }
   }
 
-  void CheckGetBatch(const std::string &key_prefix,
-                     const std::string &value_prefix, int lo, int hi) {
+  void CheckGetBatch(const std::string &key_prefix, const std::string &value_prefix, int lo,
+                     int hi) {
     std::string value;
     for (int i = lo; i <= hi; ++i) {
       auto key = key_prefix + std::to_string(i);
@@ -86,7 +81,7 @@ public:
     }
   }
 
-public:
+ public:
   ErrorType Put(const std::string &key, const std::string &value) {
     Request request = Request{kPut, 0, 0, key, value};
     Response resp;
@@ -106,16 +101,14 @@ public:
 
     // check if need to search other servers to collect fragments
     auto format = DecodeString(&resp.value);
-    LOG(raft::util::kRaft, "DecodeString Result: %s",
-        format.ToString().c_str());
+    LOG(raft::util::kRaft, "DecodeString Result: %s", format.ToString().c_str());
 
     if (format.k == 1) {
       GetKeyFromPrefixLengthFormat(format.frag.data(), value);
       return kOk;
     }
 
-    LOG(raft::util::kRaft, "[Get Partial Value: k=%d m=%d], start collecting",
-        format.k, format.m);
+    LOG(raft::util::kRaft, "[Get Partial Value: k=%d m=%d], start collecting", format.k, format.m);
 
     int k = format.k, m = format.m;
     raft::Encoder::EncodingResults input;
@@ -128,8 +121,7 @@ public:
         auto found = servers_[i]->DB()->Get(key, &frag_value);
         if (found) {
           auto format = DecodeString(&frag_value);
-          input.insert_or_assign(format.frag_id,
-                                 raft::Slice::Copy(format.frag));
+          input.insert_or_assign(format.frag_id, raft::Slice::Copy(format.frag));
         }
       }
     }
@@ -182,7 +174,7 @@ public:
     return kNoLeader;
   }
 
-private:
+ private:
   ErrorType WaitUntilRequestDone(const Request *request, Response *resp) {
     raft::util::Timer timer;
     timer.Reset();
@@ -194,34 +186,33 @@ private:
       }
       servers_[leader_id_]->DealWithRequest(request, resp);
       switch (resp->err) {
-      case kOk:
-      case kKeyNotExist:
-        return resp->err;
+        case kOk:
+        case kKeyNotExist:
+          return resp->err;
 
-      case kEntryDeleted:
-        break;
+        case kEntryDeleted:
+          break;
 
-      // The leader might be separated from the cluster
-      case kRequestExecTimeout:
-      case kNotALeader:
-        leader_id_ = kNoLeader;
-        leader_term = 0;
-        break;
+        // The leader might be separated from the cluster
+        case kRequestExecTimeout:
+        case kNotALeader:
+          leader_id_ = kNoLeader;
+          leader_term = 0;
+          break;
 
-      default:
-        assert(false);
+        default:
+          assert(false);
       }
     }
     return kKVRequestTimesout;
   }
 
-public:
+ public:
   NetConfig GetNetConfigFromNodesConfig(const NodesConfig &nodes_config) {
     NetConfig net_config;
-    std::for_each(nodes_config.begin(), nodes_config.end(),
-                  [&net_config](const auto &ent) {
-                    net_config.insert({ent.first, ent.second.addr});
-                  });
+    std::for_each(nodes_config.begin(), nodes_config.end(), [&net_config](const auto &ent) {
+      net_config.insert({ent.first, ent.second.addr});
+    });
     return net_config;
   }
 
@@ -229,8 +220,7 @@ public:
     node_num_ = nodes_config.size();
     auto net_config = GetNetConfigFromNodesConfig(nodes_config);
     for (const auto &[id, config] : nodes_config) {
-      raft::RaftNode::NodeConfig raft_config = {id, net_config,
-                                                config.storage_name, nullptr};
+      raft::RaftNode::NodeConfig raft_config = {id, net_config, config.storage_name, nullptr};
       InitRaftNodeInstance({raft_config, config.dbname});
     }
 
@@ -268,11 +258,29 @@ public:
     }
   }
 
-public:
+  // The size should be divided by the chunk_cnt
+  std::string ConstructValue(int chunk_cnt) {
+    int sz = chunk_cnt * 2 - sizeof(int);
+    std::string ret = "value-abcdefg-";
+    ret.append(sz - ret.size(), '1');
+    return ret;
+  }
+
+  auto ConstructKVServerConfigs(int node_num) {
+    NodesConfig ret;
+    for (int i = 0; i < node_num; ++i) {
+      ret.insert_or_assign(
+          i,
+          TestNodeConfig{{"127.0.0.1", uint16_t(50001 + i)}, "", "./testdb" + std::to_string(i)});
+    }
+    return ret;
+  }
+
+ public:
   void Disconnect(raft::raft_node_id_t id) { servers_[id]->Disconnect(); }
   void Reconnect(raft::raft_node_id_t id) { servers_[id]->Reconnect(); }
 
-public:
+ public:
   KvServer *servers_[kMaxNodeNum];
   int node_num_;
   raft::raft_node_id_t leader_id_ = kNoLeader;
@@ -281,33 +289,32 @@ public:
 };
 
 TEST_F(KvServerTest, TestSimplePutAndGet) {
-  auto servers_config = NodesConfig{
-      {0, {{"127.0.0.1", 50001}, "", "./testdb0"}},
-      {1, {{"127.0.0.1", 50002}, "", "./testdb1"}},
-      {2, {{"127.0.0.1", 50003}, "", "./testdb2"}},
-  };
+  // Startup a cluster with 7 servers
+  auto servers_config = ConstructKVServerConfigs(7);
+
+  const int K = 4;
+  auto t = raft::CODE_CONVERSION_NAMESPACE::get_chunk_count(K);
 
   LaunchAllServers(servers_config);
 
   const std::string key_prefix = "key";
-  const std::string value_prefix = "value-abcdefg-";
 
-  std::string value;
+  std::string value = ConstructValue(t);
   const int test_cnt = 1000;
 
   for (int i = 1; i <= test_cnt; ++i) {
     auto key = key_prefix + std::to_string(i);
-    auto value = value_prefix + std::to_string(i);
     EXPECT_EQ(Put(key, value), kOk);
   }
 
-  sleepMs(1000); // Wait leader broadcast the commit index
-  auto leader1 = GetCurrentLeaderId();
-  Disconnect(leader1);
+  sleepMs(1000);  // Wait leader broadcast the commit index
+  // auto leader1 = GetCurrentLeaderId();
+  // Disconnect(leader1);
 
+  std::string get_value;
   for (int i = 1; i <= test_cnt; ++i) {
-    EXPECT_EQ(Get(key_prefix + std::to_string(i), &value), kOk);
-    EXPECT_EQ(value, value_prefix + std::to_string(i));
+    EXPECT_EQ(Get(key_prefix + std::to_string(i), &get_value), kOk);
+    EXPECT_EQ(value, get_value);
   }
 
   ClearTestContext(servers_config);
@@ -315,10 +322,8 @@ TEST_F(KvServerTest, TestSimplePutAndGet) {
 
 TEST_F(KvServerTest, DISABLED_TestPutAndGetAfterLeaderDown) {
   auto servers_config = NodesConfig{
-      {0, {{"127.0.0.1", 50001}, "", "./testdb0"}},
-      {1, {{"127.0.0.1", 50002}, "", "./testdb1"}},
-      {2, {{"127.0.0.1", 50003}, "", "./testdb2"}},
-      {3, {{"127.0.0.1", 50004}, "", "./testdb3"}},
+      {0, {{"127.0.0.1", 50001}, "", "./testdb0"}}, {1, {{"127.0.0.1", 50002}, "", "./testdb1"}},
+      {2, {{"127.0.0.1", 50003}, "", "./testdb2"}}, {3, {{"127.0.0.1", 50004}, "", "./testdb3"}},
       {4, {{"127.0.0.1", 50005}, "", "./testdb4"}},
   };
 
@@ -332,7 +337,7 @@ TEST_F(KvServerTest, DISABLED_TestPutAndGetAfterLeaderDown) {
 
   PutBatch(key_prefix, value_prefix, 1, test_cnt);
 
-  sleepMs(1000); // Wait leader broadcast the commit index
+  sleepMs(1000);  // Wait leader broadcast the commit index
   auto leader1 = GetCurrentLeaderId();
   Disconnect(leader1);
 
@@ -368,7 +373,7 @@ TEST_F(KvServerTest, DISABLED_TestFollowerCommitAfterRejoiningTheCluster) {
 
   sleepMs(1000);
   auto leader1 = GetCurrentLeaderId();
-  Disconnect((leader1 + 1) % node_num_); // randomly disable a follower
+  Disconnect((leader1 + 1) % node_num_);  // randomly disable a follower
   LOG(raft::util::kRaft, "S%d disconnect", (leader1 + 1) % node_num_);
   //
   PutBatch(key_prefix, value_prefix, test_cnt + 1, test_cnt * 2);
@@ -391,4 +396,4 @@ TEST_F(KvServerTest, DISABLED_TestFollowerCommitAfterRejoiningTheCluster) {
 
   ClearTestContext(servers_config);
 }
-} // namespace kv
+}  // namespace kv

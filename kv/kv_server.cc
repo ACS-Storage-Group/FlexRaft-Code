@@ -53,7 +53,8 @@ KvServer *KvServer::NewKvServer(const KvClusterConfig &config, raft::raft_node_i
 
 void KvServer::Start() {
   raft_->Start();
-  startApplyKvRequestCommandsThread();
+  // Enable code conversion apply threads
+  startApplyKvRequestCommandsThread(true);
 }
 
 // A server receives a request from outside world(e.g. A client or a mock
@@ -89,11 +90,11 @@ void KvServer::DealWithRequest(const Request *request, Response *resp) {
       auto data = new char[size + 12];
       RequestToRawBytes(*request, data);
 
-      // find the start offset, it must contain the request Header and the key
-      // content
+      // The unencoded-part includes: Header: key size and contents, and values size
       int start_offset = RequestHdrSize() + sizeof(int) + request->key.size();
 
-      LOG(raft::util::kRaft, "S%d propose request startoffset(%d)", id_, start_offset);
+      LOG(raft::util::kRaft, "S%d propose request StartOffset(%d) Total Size(%d)", id_,
+          start_offset, size);
 
       // Construct a raft command
       raft::util::Timer commit_timer;
@@ -154,7 +155,7 @@ bool KvServer::CheckEntryCommitted(const raft::ProposeResult &pr, KvRequestApply
   return true;
 }
 
-void KvServer::ApplyRequestCommandThread(KvServer *server) {
+void KvServer::ApplyRequestCommandThread(KvServer *server, bool cc) {
   raft::util::Timer elapse_timer;
   while (!server->exit_.load()) {
     raft::LogEntry ent;
@@ -167,8 +168,11 @@ void KvServer::ApplyRequestCommandThread(KvServer *server) {
 
     // Apply this entry to state machine(i.e. Storage Engine)
     Request req;
-    // RawBytesToRequest(ent.CommandData().data(), &req);
-    RaftEntryToRequest(ent, &req, server->Id(), server->ClusterServerNum());
+    if (cc) {
+      RaftEntryToRequestCodeConversion(ent, &req, server->Id(), server->ClusterServerNum());
+    } else {
+      RaftEntryToRequest(ent, &req, server->Id(), server->ClusterServerNum());
+    }
 
     LOG(raft::util::kRaft, "S%d Apply request(%s) to db", server->Id(), ToString(req).c_str());
 

@@ -78,10 +78,10 @@ class KvServer {
 
  public:
   // A thread that periodically apply committed raft log entries to KVRsm
-  static void ApplyRequestCommandThread(KvServer *server);
+  static void ApplyRequestCommandThread(KvServer *server, bool cc = false);
 
-  void startApplyKvRequestCommandsThread() {
-    std::thread t(ApplyRequestCommandThread, this);
+  void startApplyKvRequestCommandsThread(bool cc = false) {
+    std::thread t(ApplyRequestCommandThread, this, cc);
     t.detach();
   }
 

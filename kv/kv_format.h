@@ -19,6 +19,10 @@ void RaftEntryToRequest(const raft::LogEntry &ent, Request *request);
 void RaftEntryToRequest(const raft::LogEntry &ent, Request *request, raft::raft_node_id_t server_id,
                         int server_num);
 
+// Construct a KV request from a raft log entry
+void RaftEntryToRequestCodeConversion(const raft::LogEntry &ent, Request *request,
+                                      raft::raft_node_id_t server_id, int server_num);
+
 // Serialize a string to raw bytes specified by buf, returns the next position
 // of last written bytes
 inline char *MakePrefixLengthKey(const std::string &s, char *buf) {
