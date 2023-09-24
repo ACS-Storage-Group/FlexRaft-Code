@@ -1,9 +1,10 @@
 import util
 import sys
 
+# Require one arguement: N
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Require at least three arguments")
+        print("Require at least two arguments")
         exit(1)
     N = int(sys.argv[1])
     cfg_file = "cluster_{}.conf".format(N)
