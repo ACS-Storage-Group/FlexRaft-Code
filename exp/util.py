@@ -24,7 +24,7 @@ class Server:
 
     def clear(self):
         self.shutdown()
-        cmd = "rm -rf {}; rm -rf {} rm -rf *.reserve".format(self.log, self.sm)
+        cmd = "rm -rf {}; rm -rf {} rm -rf /tmp/*.reserve".format(self.log, self.sm)
         return self.execute(cmd)
 
     def bootstrap_as_server(self, bin:str, conf:str):
