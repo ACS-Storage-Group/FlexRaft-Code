@@ -7,6 +7,7 @@ namespace raft {
 
 // EncodeSlice should not modify underlying data contained by input slice
 bool Encoder::EncodeSlice(const Slice &slice, int k, int m, EncodingResults *results) {
+  assert(k != 0);
   auto encoding_size = slice.size();
 
   // NOTE: What if encoding_size is not divisible to k?
