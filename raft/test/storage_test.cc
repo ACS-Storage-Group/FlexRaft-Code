@@ -245,8 +245,8 @@ TEST_F(StorageTest, TestDeleteEntries) {
 
 TEST_F(StorageTest, TestPersistencePerformance) {
   Clear();
-  const int kPutCnt = 100;
-  const size_t kSize = 2 * 1024 * 1024; // 2MB
+  const int kPutCnt = 10000;
+  const size_t kSize = 2 * 1024 * 1024; // 2MiB
   auto storage = FileStorage::Open(kStorageTestFileName);
   std::vector<uint64_t> latency;
   for (int i = 1; i <= kPutCnt; ++i) {
