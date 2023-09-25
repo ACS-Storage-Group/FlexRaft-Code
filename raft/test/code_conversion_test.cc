@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <unordered_map>
 
+#include "encoder.h"
 #include "gtest/gtest.h"
 #include "raft_type.h"
 
@@ -49,7 +50,7 @@ class CodeConversionManagementTest : public ::testing::Test {
     int reserve_for_each = r / reserved_server_cnt * fail_servers.size();
 
     // Do encoding
-    ccm.EncodeForPlacement(slice, aliveness);
+    ccm.EncodeForPlacement(slice, aliveness, nullptr);
 
     // Gather the data
     std::map<raft_node_id_t, ChunkVector> data;
@@ -124,7 +125,9 @@ TEST_F(CodeConversionManagementTest, TestAdjustChunkDistribution) {
   auto slice = GenerateSliceOfRandomSize(512 * 1024, 1024 * 1024, r * TestK);
 
   // Do encoding
-  ccm.EncodeForPlacement(slice, is_alive);
+  StaticEncoder encoder;
+  encoder.Init(TestK, TestF);
+  ccm.EncodeForPlacement(slice, is_alive, &encoder);
 
   // Gather the data
   std::map<raft_node_id_t, ChunkVector> data;

@@ -32,7 +32,7 @@ class CodeConversionManagement {
 
   // Given the liveness vector that indicates the current liveness status of this cluster,
   // Calculate the corresponding encoding data placement for it.
-  void EncodeForPlacement(const Slice& slice, const std::vector<bool>& live_vec);
+  void EncodeForPlacement(const Slice& slice, const std::vector<bool>& live_vec, StaticEncoder* static_encoder);
 
   bool DecodeCollectedChunkVec(const std::map<raft_node_id_t, ChunkVector>& input, Slice* slice);
 
@@ -70,7 +70,7 @@ class CodeConversionManagement {
   void AdjustChunkDistribution(const ChunkDistribution& cd);
 
   // Prepare the original chunks and write them into the org_chunks_ attribute
-  void PrepareOriginalChunks(const Slice& slice);
+  void PrepareOriginalChunks(const Slice& slice, StaticEncoder* static_encoder);
 
   // Assign the slices corresponds to the original chunks to each node
   void AssignOriginalChunksToNode(const ChunkDistribution& cd);

@@ -56,8 +56,8 @@ class Encoder {
   // parameters k and m is used to control this encoding process
   bool EncodeSlice(const Slice &slice, int k, int m, EncodingResults *results);
 
-  // Given a few slices, use EC coding to generate a few paraties: 
-  bool EncodeSlice(const std::vector<Slice>& slices, int k, int m, std::vector<Slice>& res);
+  // Given a few slices, use EC coding to generate a few paraties:
+  bool EncodeSlice(const std::vector<Slice> &slices, int k, int m, std::vector<Slice> &res);
 
   // Decode a set of fragments to generate the full content, the corresponding k
   // and m parameters should be set before calling this method
@@ -98,4 +98,28 @@ class Encoder {
 
   unsigned char *decode_output_[kMaxK];
 };
+
+class StaticEncoder {
+  static constexpr int kMaxK = 9;
+  static constexpr int kMaxM = 9;
+ public:
+  StaticEncoder() = default;
+  ~StaticEncoder() {
+    delete encode_matrix_;
+    delete g_tbls_;
+  }
+
+ public:
+  void Init(int k, int m);
+  bool EncodeSlice(const std::vector<Slice> &input, std::vector<Slice> &output);
+  auto GetEncodeK() const { return encode_k_; }
+  auto GetEncodeM() const { return encode_m_; }
+
+ private:
+  unsigned char *encode_input_[kMaxK], *encode_output_[kMaxM];
+  unsigned char *encode_matrix_ = nullptr;
+  unsigned char *g_tbls_ = nullptr;
+  int encode_k_ = -1, encode_m_ = -1;
+};
+
 }  // namespace raft

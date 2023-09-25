@@ -1,4 +1,5 @@
 #include "encoder.h"
+
 #include <cstdlib>
 #include <iterator>
 
@@ -92,7 +93,7 @@ TEST_F(EncoderTest, TestDecodingAfterRemoveSomeFragments) {
   // Encoding
   encoder.EncodeSlice(ent, TestK, TestM, &results);
 
-  // remove some fragments 
+  // remove some fragments
   while (results.size() > TestK) {
     auto remove_iter = std::next(std::begin(results), rand() % results.size());
     results.erase(remove_iter);
@@ -117,7 +118,7 @@ TEST_F(EncoderTest, TestEncodingDecodingLargeSlice) {
   // Encoding
   encoder.EncodeSlice(ent, TestK, TestM, &results);
 
-  // remove some fragments 
+  // remove some fragments
   while (results.size() > TestK) {
     auto remove_iter = std::next(std::begin(results), rand() % results.size());
     results.erase(remove_iter);
@@ -152,7 +153,7 @@ TEST_F(EncoderTest, TestVectorInput) {
     res.emplace(i, output[i]);
   }
 
-  // remove some fragments 
+  // remove some fragments
   while (res.size() > TestK) {
     auto remove_iter = std::next(std::begin(res), rand() % res.size());
     res.erase(remove_iter);
@@ -164,6 +165,46 @@ TEST_F(EncoderTest, TestVectorInput) {
 
   ASSERT_TRUE(b);
   ASSERT_EQ(recover_ent.compare(input), 0);
+}
+
+TEST_F(EncoderTest, TestStaticEncoder) {
+  const int TestK = 4;
+  const int TestM = 3;
+
+  // Do the encoding
+  StaticEncoder encoder;
+  encoder.Init(TestK, TestM);
+
+  for (int i = 0; i < 100; ++i) {
+    Slice ent = GenerateRandomSlice(512 * 1024, 1024 * 1024);
+    // Align the size to be multipler of TestK
+    auto sz = ent.size() - ent.size() % TestK;
+    auto input = Slice(ent.data(), sz);
+
+    std::vector<Slice> output;
+    encoder.EncodeSlice(input.Shard(TestK), output);
+    ASSERT_EQ(output.size(), TestK + TestM);
+
+    // Randomly drop some elements
+    Encoder::EncodingResults res;
+    for (int i = 0; i < output.size(); ++i) {
+      res.emplace(i, output[i]);
+    }
+
+    // remove some fragments
+    while (res.size() > TestK) {
+      auto remove_iter = std::next(std::begin(res), rand() % res.size());
+      res.erase(remove_iter);
+    }
+
+    // Decoding
+    Slice recover_ent;
+    Encoder recover_encoder;
+    auto b = recover_encoder.DecodeSlice(res, TestK, TestM, &recover_ent);
+
+    ASSERT_TRUE(b);
+    ASSERT_EQ(recover_ent.compare(input), 0);
+  }
 }
 
 }  // namespace raft

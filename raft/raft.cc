@@ -63,8 +63,14 @@ RaftState *RaftState::NewRaftState(const RaftConfig &config) {
   ret->electionTimeLimitMax_ = config.electionTimeMax;
   ret->rsm_ = config.rsm;
   ret->heartbeatTimeInterval = config::kHeartbeatInterval;
-  ret->storage_ = config.storage;  // might be nullptr
-  ret->reserve_storage_ = config.reserve_storage;   // might be nullptr
+  ret->storage_ = config.storage;                  // might be nullptr
+  ret->reserve_storage_ = config.reserve_storage;  // might be nullptr
+  ret->static_encoder_ = new StaticEncoder();
+
+  // Initialize for static encoder
+  auto k = ret->GetClusterServerNumber() - ret->livenessLevel();
+  auto m = ret->livenessLevel();
+  ret->static_encoder_->Init(k, m);
 
   ret->last_applied_ = 0;
   ret->commit_index_ = 0;
@@ -1188,7 +1194,8 @@ void RaftState::EncodeRaftEntry(raft_index_t raft_index, raft_encoding_param_t k
 
 void RaftState::EncodeRaftEntryForCodeConversion(
     raft_index_t raft_index, const std::vector<bool> &live_vec,
-    CODE_CONVERSION_NAMESPACE::CodeConversionManagement *ccm, Stripe *stripe) {
+    CODE_CONVERSION_NAMESPACE::CodeConversionManagement *ccm, Stripe *stripe,
+    StaticEncoder *static_encoder) {
   auto ent = lm_->GetSingleLogEntry(raft_index);
   assert(ent != nullptr);
 
@@ -1203,7 +1210,7 @@ void RaftState::EncodeRaftEntryForCodeConversion(
       util::ToString(live_vec).c_str());
   auto slice = Slice(ent->CommandData().data() + ent->StartOffset(),
                      ent->CommandData().size() - ent->StartOffset());
-  ccm->EncodeForPlacement(slice, live_vec);
+  ccm->EncodeForPlacement(slice, live_vec, static_encoder);
 
   // For compatability, we still write the full LogEntry into the Stripe struct
   for (int i = 0; i < live_vec.size(); ++i) {
@@ -1328,7 +1335,7 @@ void RaftState::ReplicateNewProposeEntryCodeConversion(raft_index_t raft_index) 
   auto stripe = new Stripe();
 
   // Do the Encoding according to the liveness vector
-  EncodeRaftEntryForCodeConversion(raft_index, live_vec, ccm, stripe);
+  EncodeRaftEntryForCodeConversion(raft_index, live_vec, ccm, stripe, static_encoder_);
 
   // Record the encoded data
   encoded_stripe_.insert_or_assign(raft_index, stripe);

@@ -1,5 +1,7 @@
 #include "encoder.h"
 
+#include <chrono>
+
 #include "isa-l/erasure_code.h"
 #include "log_entry.h"
 #include "raft_type.h"
@@ -70,8 +72,9 @@ bool Encoder::EncodeSlice(const std::vector<Slice> &slices, int k, int m, std::v
     res.push_back(slices[i]);
   }
 
+  auto alloc_data = new unsigned char[fragment_sz * m];
   for (int i = 0; i < m; ++i) {
-    encode_output_[i] = new unsigned char[fragment_sz];
+    encode_output_[i] = alloc_data + fragment_sz * i;
     res.push_back(Slice((char *)(encode_output_[i]), fragment_sz));
   }
 
@@ -192,6 +195,43 @@ bool Encoder::DecodeSlice(const EncodingResults &fragments, int k, int m, Slice 
     return false;
   }
   *results = Slice(data, decode_size);
+  return true;
+}
+
+void StaticEncoder::Init(int k, int m) {
+  encode_matrix_ = new unsigned char[kMaxK * (kMaxM + kMaxK)];
+
+  auto start = std::chrono::steady_clock::now();
+
+  auto t = m + k;
+  g_tbls_ = new unsigned char[k * m * 32];
+  encode_k_ = k;
+  encode_m_ = m;
+
+  gf_gen_cauchy1_matrix(encode_matrix_, t, k);
+  ec_init_tables(k, m, &encode_matrix_[k * k], g_tbls_);
+
+  auto end = std::chrono::steady_clock::now();
+  auto dura = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+  printf("StaticEncoder Init time: %lu ns\n", dura.count());
+}
+
+bool StaticEncoder::EncodeSlice(const std::vector<Slice> &input, std::vector<Slice> &output) {
+  auto s = input.at(0);
+  auto fragment_sz = s.size();
+
+  for (int i = 0; i < encode_k_; ++i) {
+    encode_input_[i] = (unsigned char *)(input[i].data());
+    output.push_back(input[i]);
+  }
+
+  auto alloc_data = new unsigned char[fragment_sz * encode_m_];
+  for (int i = 0; i < encode_m_; ++i) {
+    encode_output_[i] = alloc_data + fragment_sz * i;
+    output.push_back(Slice((char *)(encode_output_[i]), fragment_sz));
+  }
+
+  ec_encode_data(fragment_sz, encode_k_, encode_m_, g_tbls_, encode_input_, encode_output_);
   return true;
 }
 

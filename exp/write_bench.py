@@ -79,7 +79,7 @@ if __name__ == "__main__":
 
     for i in range(len(values)):
         results.append(run_bench(N, f, values[i], write_count[i]))
-        print("[Write Latency: {} us][Commit Latency: {} us]", results[-1].write_latency, results[-1].commit_latency)
+        print("[Write Latency: {} us][Commit Latency: {} us]".format(results[-1].write_latency, results[-1].commit_latency))
         # Sleep 5 seconds between each benchmark
         time.sleep(5)
 

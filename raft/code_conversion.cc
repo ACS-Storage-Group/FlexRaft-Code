@@ -216,7 +216,8 @@
 namespace raft {
 namespace CODE_CONVERSION_NAMESPACE {
 
-void CodeConversionManagement::PrepareOriginalChunks(const Slice& slice) {
+void CodeConversionManagement::PrepareOriginalChunks(const Slice& slice,
+                                                     StaticEncoder* static_encoder) {
   int total_chunk_num = r_ * k_;
 
   // Cut the data into a few chunks:
@@ -225,10 +226,15 @@ void CodeConversionManagement::PrepareOriginalChunks(const Slice& slice) {
   assert(slice.size() % total_chunk_num == 0);
 
   /// Encode the original data:
-  Encoder encoder;
   std::vector<Slice> input_slices = slice.Shard(k_), output_slices;
 
-  encoder.EncodeSlice(input_slices, k_, F_, output_slices);
+  if (static_encoder && static_encoder->GetEncodeK() == k_ && static_encoder->GetEncodeM() == F_) {
+    static_encoder->EncodeSlice(input_slices, output_slices);
+    printf("Use static encoder to encode data\n");
+  } else {
+    Encoder encoder;
+    encoder.EncodeSlice(input_slices, k_, F_, output_slices);
+  }
 
   // Shard the fragments into chunks accordingly. Note that the output_slices
   // also contains the original chunk
@@ -286,9 +292,10 @@ void CodeConversionManagement::EncodeReservedChunksAndAssignToNode(const ChunkDi
 }
 
 void CodeConversionManagement::EncodeForPlacement(const Slice& slice,
-                                                  const std::vector<bool>& live_vec) {
+                                                  const std::vector<bool>& live_vec,
+                                                  StaticEncoder* static_encoder) {
   util::LatencyGuard guard([](uint64_t us) { printf("Encode cost: %lu us\n", us); });
-  PrepareOriginalChunks(slice);
+  PrepareOriginalChunks(slice, static_encoder);
 
   ChunkDistribution cd(k_, F_, r_);
   cd.GenerateChunkDistribution(live_vec);
@@ -427,7 +434,7 @@ void CodeConversionManagement::AdjustChunkDistribution(const ChunkDistribution& 
     for (const auto& chunk : chunk_vec.as_vec()) {
       // This is a parity chunk
       if (chunk.Index1().chunk_id == -1) {
-        delete[] chunk.data();
+        // delete[] chunk.data();
       }
     }
   }

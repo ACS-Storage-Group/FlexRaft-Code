@@ -313,7 +313,7 @@ class RaftState {
 
   void EncodeRaftEntryForCodeConversion(raft_index_t raft_index, const std::vector<bool> &live_vec,
                                         CODE_CONVERSION_NAMESPACE::CodeConversionManagement *ccm,
-                                        Stripe *stripe);
+                                        Stripe *stripe, StaticEncoder *encoder);
   // Adjust the Chunk distribution for a single entry at specific index position
   void AdjustChunkDistributionCodeConversion(raft_index_t raft_index,
                                              const std::vector<bool> &live_vec,
@@ -482,6 +482,7 @@ class RaftState {
   // LogManager and storage interface for reservation chunks
   LogManager *reserve_lm_;
   Storage *reserve_storage_;
+  StaticEncoder* static_encoder_ = nullptr;
 
   // For FlexibleK and CRaft: We need to detect the number of live servers
   LivenessMonitor live_monitor_;
