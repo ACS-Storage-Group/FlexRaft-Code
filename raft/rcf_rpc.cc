@@ -63,13 +63,13 @@ RCF::ByteBuffer RaftRPCService::AppendEntries(const RCF::ByteBuffer &arg_buf) {
     reply.chunk_info_cnt = reply.chunk_infos.size();
   }
 
+  RCF::ByteBuffer reply_buf(serializer.getSerializeSize(reply));
+  serializer.Serialize(&reply, &reply_buf);
+
 #ifdef ENABLE_PERF_RECORDING
   counter.Record();
   PERF_LOG(&counter);
 #endif
-
-  RCF::ByteBuffer reply_buf(serializer.getSerializeSize(reply));
-  serializer.Serialize(&reply, &reply_buf);
 
   return reply_buf;
 }
@@ -136,12 +136,16 @@ void RCFRpcClient::sendMessage(const AppendEntriesArgs &args) {
 
 #ifdef ENABLE_PERF_RECORDING
   util::AppendEntriesRPCPerfCounter counter(arg_buf.getLength());
-#endif
-
+  auto cmp_callback =
+      [=]() {
+        onAppendEntriesCompleteRecordTimer(ret, client_ptr, this->raft_, this->id_, counter);
+      }
+#else
   auto cmp_callback = [=]() {
     onAppendEntriesComplete(ret, client_ptr, this->raft_, this->id_,
                             {arg_buf.getLength(), start_time}, &(this->recorder_));
   };
+#endif
   ret = client_ptr->AppendEntries(RCF::AsyncTwoway(cmp_callback), arg_buf);
 }
 
