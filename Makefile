@@ -16,6 +16,12 @@ log: clean
 	mv build/compile_commands.json ./
 	${CMAKE} --build build -j 4
 
+.PHONY: perf
+perf: clean 
+	${CMAKE} -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=true -DLOG=off -DPERF=on
+	mv build/compile_commands.json ./
+	${CMAKE} --build build -j 4
+
 .PHONY: clean
 clean:
 	rm -rf build
