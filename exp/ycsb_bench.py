@@ -74,6 +74,7 @@ if __name__ == "__main__":
     for i in range(len(bench_types)):
         results.append(run_bench(N, f, bench_types[i], value_size, op_count))
         # Sleep 5 seconds for each benchmark
+        print("[Bench: {}][Throughput: {:.2f} Mbps]".format(bench_types[i], results[i].bw))
         time.sleep(5)
 
     # output the results

@@ -235,3 +235,5 @@ class ScrambledZipfianGenerator : public KeyGenerator {
   const uint64_t num_items_;
   ZipfianGenerator generator_;
 };
+
+inline int round_up(int sz, int div) { return ((sz - 1) / div + 1) * div; }

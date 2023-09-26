@@ -78,8 +78,6 @@ AnalysisResults Analysis(const std::vector<OperationStat> &collected_data) {
                          apply_latency_sum / collected_data.size()};
 }
 
-int round_up(int sz, int div) { return ((sz - 1) / div + 1) * div; }
-
 void BuildBench(const BenchConfiguration &cfg, std::vector<KvPair> *bench) {
   auto val_sz = round_up(cfg.bench_put_size, chunk_cnt);
   for (int i = 1; i <= cfg.bench_put_cnt; ++i) {

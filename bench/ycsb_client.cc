@@ -27,6 +27,9 @@ DEFINE_string(type, "None", "YCSB benchmark type: YCSB_A, YCSB_B, YCSB_C, YCSB_D
 using KvPair = std::pair<std::string, std::string>;
 const int kVerboseInterval = 100;
 
+const int K = 4;
+const int chunk_cnt = raft::code_conversion::get_chunk_count(K);
+
 enum YCSBOpType {
   kPut = 0,
   kGet = 1,
@@ -128,6 +131,8 @@ AnalysisResults Analysis(const std::vector<OperationStat> &collected_data) {
 void BuildBench(const BenchConfiguration &cfg, std::vector<YCSBOperation> *bench) {
   const size_t kKeyRange = 1000;
   ScrambledZipfianGenerator generator(kKeyRange);
+  // Make the size good for code_conversion encoding
+  auto value_sz = round_up(cfg.bench_put_size, chunk_cnt) - sizeof(int);
   for (int i = 1; i <= cfg.bench_put_cnt; ++i) {
     auto key_id = generator.Next();
     auto key = raft::util::MakeKey(key_id, 64);
@@ -139,7 +144,7 @@ void BuildBench(const BenchConfiguration &cfg, std::vector<YCSBOperation> *bench
         bench->push_back({kGet, key, value});
       }
       type = kPut;
-      value = raft::util::MakeValue(key_id, cfg.bench_put_size);
+      value = raft::util::MakeValue(key_id, value_sz);
     } else {
       type = kGet;
     }
