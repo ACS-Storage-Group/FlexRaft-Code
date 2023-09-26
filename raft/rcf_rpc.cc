@@ -139,7 +139,7 @@ void RCFRpcClient::sendMessage(const AppendEntriesArgs &args) {
   auto cmp_callback =
       [=]() {
         onAppendEntriesCompleteRecordTimer(ret, client_ptr, this->raft_, this->id_, counter);
-      }
+      };
 #else
   auto cmp_callback = [=]() {
     onAppendEntriesComplete(ret, client_ptr, this->raft_, this->id_,
