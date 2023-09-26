@@ -86,9 +86,10 @@ struct OperationStat {
   std::string ToString() const {
     char buf[512];
     sprintf(buf,
-            "[Type = %s][OpLatency = %" PRIu64" us][CommitLatency = %" PRIu64" "
+            "[Type = %s][OpLatency = %" PRIu64 " us][CommitLatency = %" PRIu64
+            " "
             "us][ApplyLatency = "
-            "%" PRIu64" us]",
+            "%" PRIu64 " us]",
             YCSBTypeToString(type), op_latency, commit_latency, apply_latency);
     return std::string(buf);
   }
@@ -249,9 +250,10 @@ int main(int argc, char *argv[]) {
   of.open("results");
 
   // Do warmup
+  auto cc_value_sz = round_up(val_size, chunk_cnt) - sizeof(int);
   auto client = new kv::KvServiceClient(cluster_cfg, 0);
   for (int i = 0; i < 1000; ++i) {
-    auto stat = client->Put(raft::util::MakeKey(i, 64), raft::util::MakeValue(i, val_size));
+    auto stat = client->Put(raft::util::MakeKey(i, 64), raft::util::MakeValue(i, cc_value_sz));
     assert(stat.err == kv::kOk);
   }
   delete client;

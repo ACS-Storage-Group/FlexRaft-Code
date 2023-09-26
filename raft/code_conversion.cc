@@ -230,7 +230,7 @@ void CodeConversionManagement::PrepareOriginalChunks(const Slice& slice,
 
   if (static_encoder && static_encoder->GetEncodeK() == k_ && static_encoder->GetEncodeM() == F_) {
     static_encoder->EncodeSlice(input_slices, output_slices);
-    printf("Use static encoder to encode data\n");
+    // printf("Use static encoder to encode data\n");
   } else {
     Encoder encoder;
     encoder.EncodeSlice(input_slices, k_, F_, output_slices);
