@@ -744,12 +744,14 @@ void RaftState::CheckConflictEntryAndAppendNewCodeConversion(AppendEntriesArgs *
         if (reserve_storage_) reserve_storage_->AppendEntry(reserve_entry);
       }
       LOG(util::kRaft, "[CC] S%d OVERWRITE I%d ConflictIndex=I%d", id_, raft_index, raft_index);
+      // Need to overwrite the K parameter of this entry stored in this log manager
+      ent->SetChunkInfo(args->entries[array_index].GetChunkInfo());
     } else {
     }
     ent = lm_->GetSingleLogEntry(raft_index);
     assert(ent->GetOriginalChunkVector().size() > 0);
     reply->chunk_infos.push_back(
-        ChunkInfo{ent->GetChunkInfo().GetRaftIndex(), ent->GetChunkInfo().GetK(), true});
+        ChunkInfo{ent->GetChunkInfo().GetK(), ent->GetChunkInfo().GetRaftIndex(), true});
     LOG(util::kRaft, "S%d REPLY (I%d T%d ChunkInfo(%s))", id_, raft_index, ent->Term(),
         ent->GetChunkInfo().ToString().c_str());
   }
@@ -1236,8 +1238,8 @@ void RaftState::EncodeRaftEntryForCodeConversion(
 void RaftState::AdjustChunkDistributionCodeConversion(raft_index_t raft_index,
                                                       const std::vector<bool> &live_vec,
                                                       raft_encoding_param_t code_conversion_k) {
-  LOG(util::kRaft, "S%d Adjust ChunkDistributionForCodeConversion: %s", id_,
-      util::ToString(live_vec).c_str());
+  LOG(util::kRaft, "S%d Adjust ChunkDistributionForCodeConversion: %s I%d", id_,
+      util::ToString(live_vec).c_str(), raft_index);
 
   auto ccm = cc_managment_[raft_index];
   auto stripe = encoded_stripe_[raft_index];
@@ -1428,15 +1430,15 @@ void RaftState::ReplicateEntriesCodeConversion() {
   auto live_vec = live_monitor_.GetLivenessVector();
   LOG(util::kRaft, "[CC] S%d Get Current LiveVec: %s", id_, util::ToString(live_vec).c_str());
   MaybeAdjustDistributionAndReplicate(live_vec);
-  for (auto peer_id : peers_) {
-    if (peer_id != id_) {
-      if (live_monitor_.IsAlive(peer_id)) {
-        sendAppendEntriesCodeConversion(peer_id);
-      } else {
-        sendHeartBeat(peer_id);
-      }
-    }
-  }
+  // for (auto peer_id : peers_) {
+  //   if (peer_id != id_) {
+  //     if (live_monitor_.IsAlive(peer_id)) {
+  //       sendAppendEntriesCodeConversion(peer_id);
+  //     } else {
+  //       sendHeartBeat(peer_id);
+  //     }
+  //   }
+  // }
 }
 
 void RaftState::MaybeReEncodingAndReplicate() {
@@ -1481,7 +1483,7 @@ void RaftState::MaybeReEncodingAndReplicate() {
 }
 
 void RaftState::MaybeAdjustDistributionAndReplicate(const std::vector<bool> &live_vec) {
-  LOG(util::kRaft, "S%d ADJUST CHUNK DISTRIBUTION", id_);
+  LOG(util::kRaft, "S%d MAYBEADJUST CHUNK DISTRIBUTION", id_);
 
   // For each uncommitted entry, adjust their Chunk storage distribution
   auto last_index = lm_->LastLogEntryIndex();
@@ -1692,13 +1694,13 @@ void RaftState::sendAppendEntriesCodeConversion(raft_node_id_t peer) {
     auto ccm = cc_managment_[raft_index];
     // Avoid resending original chunks if these chunks have been replicated for last round
     if (ccm->HasReceivedOrgChunk(peer)) {
-      args.entries.end()->OriginalChunkVectorRef().clear();
+      args.entries.back().OriginalChunkVectorRef().clear();
       LOG(util::kRaft, "[CC] S%d AE To S%d(REMOVE Org Chunk At I%d) at T%d", id_, peer, raft_index,
           CurrentTerm());
     }
     LOG(util::kRaft, "[CC] S%d AE To S%d I%d (Org: %d Reserve: %d)", id_, peer, raft_index,
-        args.entries.back().GetOriginalChunkVector().size(),
-        args.entries.back().GetReservedChunkVector().size());
+        args.entries.back().OriginalChunkVectorRef().size(),
+        args.entries.back().ReservedChunkVectorRef().size());
   }
 
   LOG(util::kRaft, "S%d AE To S%d (I%d->I%d) at T%d", id_, peer, next_index,

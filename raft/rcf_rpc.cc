@@ -136,10 +136,9 @@ void RCFRpcClient::sendMessage(const AppendEntriesArgs &args) {
 
 #ifdef ENABLE_PERF_RECORDING
   util::AppendEntriesRPCPerfCounter counter(arg_buf.getLength());
-  auto cmp_callback =
-      [=]() {
-        onAppendEntriesCompleteRecordTimer(ret, client_ptr, this->raft_, this->id_, counter);
-      };
+  auto cmp_callback = [=]() {
+    onAppendEntriesCompleteRecordTimer(ret, client_ptr, this->raft_, this->id_, counter);
+  };
 #else
   auto cmp_callback = [=]() {
     onAppendEntriesComplete(ret, client_ptr, this->raft_, this->id_,

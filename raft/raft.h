@@ -31,7 +31,7 @@ enum RaftRole {
 namespace config {
 const int64_t kHeartbeatInterval = 100;         // 100ms
 const int64_t kCollectFragmentsInterval = 100;  // 100ms
-const int64_t kReplicateInterval = 500;
+const int64_t kReplicateInterval = 10;
 const int64_t kElectionTimeoutMin = 500;  // 500ms
 constexpr int kLivenessTimeoutInterval = 200;
 const int64_t kElectionTimeoutMax = 1000;  // 800ms
@@ -82,10 +82,21 @@ struct LivenessMonitor {
     response_time[me] = 0;
   }
 
+  // The input parameter num does not contain the leader itself.
   void SetLivenessNumber(int num) {
-    for (int i = 0; i < std::min(num, node_num); ++i) {
-      response[i] = true;
+    assert(num <= node_num);
+    int record_num = 0;
+    for (int i = 0; i < node_num; ++i) {
+      // use num-1 since "me" is always alive
+      if (record_num < num - 1 && i != me) {
+        response[i] = true;
+        record_num++;
+      } else {
+        response[i] = false;
+      }
+      response_time[i] = timer.ElapseMilliseconds();
     }
+    response[me] = true;
   }
 
   void UpdateLiveness(raft_node_id_t id) {
@@ -451,6 +462,8 @@ class RaftState {
   int AliveServersOfLastPoint() const { return alive_servers_of_last_point_; }
   void UpdateAliveServers(int num) { alive_servers_of_last_point_ = num; }
 
+  void SetLivenessNumber(int num) { live_monitor_.SetLivenessNumber(num); }
+
  public:
   // For concurrency control. A raft state instance might be accessed via
   // multiple threads, e.g. RPC thread that receives request; The state machine
@@ -482,7 +495,7 @@ class RaftState {
   // LogManager and storage interface for reservation chunks
   LogManager *reserve_lm_;
   Storage *reserve_storage_;
-  StaticEncoder* static_encoder_ = nullptr;
+  StaticEncoder *static_encoder_ = nullptr;
 
   // For FlexibleK and CRaft: We need to detect the number of live servers
   LivenessMonitor live_monitor_;

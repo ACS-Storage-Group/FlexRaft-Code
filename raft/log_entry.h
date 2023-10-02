@@ -63,7 +63,7 @@ class LogEntry {
   void SetReservedChunkVector(const CODE_CONVERSION_NAMESPACE::ChunkVector &cv) {
     reserved_cv_ = cv;
   }
-  auto GetReservedChunkVector() const -> CODE_CONVERSION_NAMESPACE::ChunkVector {
+  auto GetReservedChunkVector() const -> const CODE_CONVERSION_NAMESPACE::ChunkVector& {
     return reserved_cv_;
   }
   auto &ReservedChunkVectorRef() { return reserved_cv_; }
