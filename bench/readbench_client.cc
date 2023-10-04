@@ -31,6 +31,9 @@ const int kVerboseInterval = 100;
 
 int repeated_read_cnt = 0;
 
+const int K = 4;
+const int chunk_cnt = raft::code_conversion::get_chunk_count(K);
+
 struct BenchConfiguration {
   std::string key_prefix;
   std::string value_prefix;
@@ -81,10 +84,11 @@ AnalysisResults Analysis(const std::vector<OperationStat> &collected_data) {
 }
 
 void BuildBench(const BenchConfiguration &cfg, std::vector<KvPair> *bench, int repeated_read_cnt) {
-  const std::string value_suffix(cfg.bench_put_size, 0);
+  auto val_sz = round_up(cfg.bench_put_size, chunk_cnt);
   for (int i = 1; i <= cfg.bench_put_cnt; ++i) {
     auto key = cfg.key_prefix + std::to_string(i);
-    auto val = cfg.value_prefix + std::to_string(i) + value_suffix;
+    auto val = cfg.value_prefix + std::to_string(i);
+    val.append(val_sz - val.size() - sizeof(int), '0');
     bench->push_back({key, val});
   }
 }
