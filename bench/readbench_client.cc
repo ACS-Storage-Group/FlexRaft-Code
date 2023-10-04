@@ -101,11 +101,16 @@ void ExecuteBench(kv::KvServiceClient *client, const std::vector<KvPair> &bench)
   std::printf("[Execution Process]\n");
 
   // Ingest data to do warm up first:
+  int warmup_already_done = 0;
   for (const auto &p : bench) {
     auto stat = client->Put(p.first, p.second);
     if (stat.err != kv::kOk) {
       printf("Warmup failed");
       exit(1);
+    }
+    ++warmup_already_done;
+    if (warmup_already_done % 100 == 0) {
+      std::cout << "\r[Warmup Already Execute " << warmup_already_done << " Ops]" << std::flush;
     }
   }
 
@@ -145,6 +150,9 @@ void ExecuteBench(kv::KvServiceClient *client, const std::vector<KvPair> &bench)
       // if (succ_cnt > 0 && succ_cnt % kVerboseInterval == 0) {
       //   std::cout << "\r[Already Execute " << succ_cnt << " Ops]" << std::flush;
       // }
+    }
+    if (succ_cnt % 100 == 0) {
+      printf("\r[Readbench already done: %d]", succ_cnt);
     }
   }
   printf("[Get Results][Succ Count=%d]\n", succ_cnt);
