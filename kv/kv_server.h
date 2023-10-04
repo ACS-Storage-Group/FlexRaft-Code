@@ -35,6 +35,15 @@ class KvServer {
     int k, m;
   };
 
+  // The value gathering task specialized for code conversion
+  struct ValueGatheringTaskCodeConversion {
+    std::string key;
+    raft::raft_index_t read_index;
+    raft::raft_node_id_t replied_id;
+    std::map<raft::raft_node_id_t, raft::code_conversion::ChunkVector> *decode_input;
+    int k, m;
+  };
+
   struct ValueGatheringTaskResults {
     std::string *value;
     ErrorType err;
@@ -55,6 +64,8 @@ class KvServer {
 
  public:
   void DoValueGatheringTask(ValueGatheringTask *task, ValueGatheringTaskResults *res);
+  void DoValueGatheringTaskCodeConversion(ValueGatheringTaskCodeConversion *task,
+                                          ValueGatheringTaskResults *res);
   void DealWithRequest(const Request *request, Response *resp);
   // Disable this server
 
@@ -113,6 +124,8 @@ class KvServer {
     }
     return kv_peers_[node_id];
   }
+
+  int GetServerNum() { return kv_peers_.size() + 1; }
 
  private:
   raft::RaftNode *raft_;

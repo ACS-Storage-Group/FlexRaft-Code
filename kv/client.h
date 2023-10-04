@@ -4,6 +4,7 @@
 #include <unordered_map>
 
 #include "RCF/Future.hpp"
+#include "chunk.h"
 #include "config.h"
 #include "kv_node.h"
 #include "raft_type.h"
@@ -32,6 +33,15 @@ class KvServiceClient {
     int k, m;
   };
 
+  // The value gathering task specialized for code conversion
+  struct GatherValueTaskCodeConversion {
+    std::string key;
+    raft::raft_index_t read_index;
+    raft::raft_node_id_t replied_id;
+    std::map<raft::raft_node_id_t, raft::code_conversion::ChunkVector> *decode_input;
+    int k, m;
+  };
+
   struct GatherValueTaskResults {
     std::string *value;
     ErrorType err;
@@ -41,9 +51,11 @@ class KvServiceClient {
   OperationResults Put(const std::string &key, const std::string &value);
   OperationResults Get(const std::string &, std::string *value);
   OperationResults Delete(const std::string &key);
-  OperationResults Abort();
+  OperationResults AbortLeader();
 
   void DoGatherValueTask(const GatherValueTask *task, GatherValueTaskResults *res);
+  void DoGatherValueTaskCodeConversion(GatherValueTaskCodeConversion *task,
+                                       GatherValueTaskResults *res);
 
   static void OnGetValueRpcComplete(RCF::Future<GetValueResponse> ret, KvServiceClient *client);
 
@@ -78,6 +90,8 @@ class KvServiceClient {
   }
 
   uint32_t ClientId() const { return client_id_; }
+
+  int GetServerNum() const { return servers_.size(); }
 
  private:
   raft::raft_node_id_t DetectCurrentLeader();

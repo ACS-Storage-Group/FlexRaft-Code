@@ -140,9 +140,8 @@ void RunRaftLeader(raft_node_id_t id, const NodesConfig &configs, int data_size,
   auto leader = ConstructRaftLeader(id, configs);
   RCF::sleepMs(1000);
   CommitLatencyRecorder recorder;
+  auto data = GenerateRandomSlice(data_size, data_size);
   for (int i = 1; i <= propose_cnt; ++i) {
-    auto data = GenerateRandomSlice(data_size, data_size);
-
     // First set the liveness number to be N
     leader->SetLivenessNumber(7);
 

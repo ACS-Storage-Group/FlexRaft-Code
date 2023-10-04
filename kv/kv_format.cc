@@ -80,6 +80,7 @@ void RaftEntryToRequest(const raft::LogEntry &ent, Request *request, raft::raft_
 
 void RaftEntryToRequestCodeConversion(const raft::LogEntry &ent, Request *request,
                                       raft::raft_node_id_t server_id, int server_num) {
+  // [k, m, server_id]
   char hdr_data[12];
   *(int *)hdr_data = ent.Type() == raft::kNormal ? 1 : ent.GetChunkInfo().GetK();
   *(int *)(hdr_data + 4) = ent.Type() == raft::kNormal ? 0 : server_num - ent.GetChunkInfo().GetK();

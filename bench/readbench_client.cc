@@ -11,9 +11,11 @@
 #include <vector>
 
 #include "client.h"
+#include "concurrent_queue.h"
 #include "config.h"
 #include "kv_node.h"
 #include "log_manager.h"
+#include "raft_type.h"
 #include "rpc.h"
 #include "type.h"
 #include "util.h"
@@ -50,8 +52,9 @@ struct OperationStat {
   std::string ToString() const {
     char buf[512];
     sprintf(buf,
-            "[OpLatency = %" PRIu64" us][CommitLatency = %" PRIu64" us][ApplyLatency = "
-            "%" PRIu64" us]",
+            "[OpLatency = %" PRIu64 " us][CommitLatency = %" PRIu64
+            " us][ApplyLatency = "
+            "%" PRIu64 " us]",
             op_latency, commit_latency, apply_latency);
     return std::string(buf);
   }
@@ -107,7 +110,7 @@ void ExecuteBench(kv::KvServiceClient *client, const std::vector<KvPair> &bench)
   std::this_thread::sleep_for(std::chrono::seconds(3));
 
   // Abort the leader
-  auto stat = client->Abort();
+  auto stat = client->AbortLeader();
 
   // Wait for the cluster to achieve new consensus
   std::this_thread::sleep_for(std::chrono::seconds(3));
@@ -146,15 +149,16 @@ void ExecuteBench(kv::KvServiceClient *client, const std::vector<KvPair> &bench)
   auto [recover_read_latency, recover_commit, recover_apply] = Analysis(recover_op_stats);
   auto [fast_read_latency, fast_commit, fast_apply] = Analysis(fast_op_stats);
 
-  printf("[Results][Succ Get Cnt=%" PRIu64"][Average Latency = %" PRIu64" us]\n", op_stats.size(), avg_latency);
+  printf("[Results][Succ Get Cnt=%" PRIu64 "][Average Latency = %" PRIu64 " us]\n", op_stats.size(),
+         avg_latency);
 
-  printf(
-      "[Recover Read Results][Succ Get Cnt=%" PRIu64"][Recover Read Latency = %" PRIu64" "
-      "us]\n",
-      op_stats.size(), recover_read_latency);
+  printf("[Recover Read Results][Succ Get Cnt=%" PRIu64 "][Recover Read Latency = %" PRIu64
+         " "
+         "us]\n",
+         op_stats.size(), recover_read_latency);
 
-  printf("[Fast Read Results][Succ Get Cnt=%" PRIu64"][Fast Read Latency = %" PRIu64" us]\n", op_stats.size(),
-         fast_read_latency);
+  printf("[Fast Read Results][Succ Get Cnt=%" PRIu64 "][Fast Read Latency = %" PRIu64 " us]\n",
+         op_stats.size(), fast_read_latency);
 
   // Dump the results to file
   // std::ofstream of;

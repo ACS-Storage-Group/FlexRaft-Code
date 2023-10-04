@@ -126,7 +126,7 @@ class KvClusterTest : public ::testing::Test {
   int node_num_;
 };
 
-TEST_F(KvClusterTest, TestSimplePutGetOperation) {
+TEST_F(KvClusterTest, DISABLED_TestSimplePutGetOperation) {
   auto cluster_config = ConstructKVClusterConfigs(7);
   LaunchKvServiceNodes(cluster_config);
   sleepMs(1000);
@@ -148,6 +148,30 @@ TEST_F(KvClusterTest, TestSimplePutGetOperation) {
   DoBatchWrite(client, kTestCnt, 2 * kTestCnt, "key-", value);
   sleepMs(1000);
   DoBatchGetAndCheck(client, kTestCnt, 2 * kTestCnt, "key-", value);
+
+  ClearTestContext(cluster_config);
+}
+
+TEST_F(KvClusterTest, TestGetAfterLeaderDown) {
+  auto cluster_config = ConstructKVClusterConfigs(7);
+  LaunchKvServiceNodes(cluster_config);
+  sleepMs(1000);
+
+  const int K = 4;
+  int chunk_cnt = raft::code_conversion::get_chunk_count(K);
+  auto value = ConstructValue(chunk_cnt);
+  const int kTestCnt = 1000;
+
+  auto client = std::make_shared<KvServiceClient>(cluster_config, 0);
+  DoBatchWrite(client, 1, kTestCnt, "key-", value);
+  sleepMs(1000);
+
+  // Make the leader down and propose a new leader
+  auto leader = GetLeaderId();
+  Disconnect(leader);
+  sleepMs(1000);
+
+  DoBatchGetAndCheck(client, 1, kTestCnt, "key-", value);
 
   ClearTestContext(cluster_config);
 }

@@ -1,12 +1,15 @@
 #include "kv_server.h"
 
 #include <chrono>
+#include <cstdint>
 #include <cstdlib>
+#include <map>
 #include <mutex>
 #include <thread>
 
 #include "RCF/RecursionLimiter.hpp"
 #include "RCF/ThreadLibrary.hpp"
+#include "chunk.h"
 #include "client.h"
 #include "kv_format.h"
 #include "log_entry.h"
@@ -246,39 +249,43 @@ void KvServer::ExecuteGetOperation(const Request *request, Response *resp) {
   // Otherwise, a value gathering task should be established and executed to get
   // the full entry value.
   int k = format.k, m = format.m;
-  raft::Encoder::EncodingResults input;
-  input.insert({format.frag_id, raft::Slice::Copy(format.frag)});
-  LOG(raft::util::kRaft, "[S%d] Add Fragment of Frag%d", Id(), format.frag_id);
 
-  ValueGatheringTask task{request->key, resp->read_index, resp->reply_server_id, &input, k, m};
+  std::map<raft::raft_node_id_t, raft::code_conversion::ChunkVector> decode_input;
+  auto slice = raft::Slice::Copy(format.frag);
+  raft::code_conversion::ChunkVector cv;
+  cv.Deserialize(slice);
+  decode_input.insert_or_assign(Id(), cv);
+
+  LOG(raft::util::kRaft, "[CC] [S%d] ExecuteGetOperation: Add CV(%d) of Frag%d", Id(), cv.size(),
+      format.frag_id);
+
+  ValueGatheringTaskCodeConversion task{
+      request->key, resp->read_index, resp->reply_server_id, &decode_input, k, m};
   ValueGatheringTaskResults res{&(resp->value), kOk};
 
-  DoValueGatheringTask(&task, &res);
+  DoValueGatheringTaskCodeConversion(&task, &res);
 
-  // Add this new decoded entry into database
-  char tmp_data[12];
-  *reinterpret_cast<int *>(tmp_data) = 1;
-  *reinterpret_cast<int *>(tmp_data + 4) = 0;
-  *reinterpret_cast<int *>(tmp_data + 8) = 0;
-
-  std::string insert_full_entry = "";
-  for (int i = 0; i < 12; ++i) {
-    insert_full_entry.push_back(tmp_data[i]);
-  }
+  // Add this new decoded and full entry into the state machine
+  char hdr_data[sizeof(int) * 4];
+  *reinterpret_cast<int *>(hdr_data) = 1;
+  *reinterpret_cast<int *>(hdr_data + 4) = 0;
+  *reinterpret_cast<int *>(hdr_data + 8) = 0;
+  *reinterpret_cast<int *>(hdr_data + 12) = (res.value)->size();
 
   auto prefix_key_size = res.value->size() + sizeof(int);
-  char *tmp = new char[prefix_key_size];
 
-  MakePrefixLengthKey(*res.value, tmp);
-  insert_full_entry.append(tmp, prefix_key_size);
-
-  resp->value = insert_full_entry;
-  resp->err = kOk;
+  std::string insert_full_entry = "";
+  insert_full_entry.reserve(res.value->size() + sizeof(int) * 4);
+  insert_full_entry.append(hdr_data, sizeof(int) * 4);
+  insert_full_entry.append(*res.value);
 
   // Add this entry into database
   db_->Put(request->key, insert_full_entry);
 
-  delete[] tmp;
+  // Return the value
+  resp->value = insert_full_entry;
+  resp->err = kOk;
+
   return;
 }
 
@@ -373,4 +380,109 @@ void KvServer::DoValueGatheringTask(ValueGatheringTask *task, ValueGatheringTask
   }
   clear_gather_ctx();
 }
+
+void KvServer::DoValueGatheringTaskCodeConversion(ValueGatheringTaskCodeConversion *task,
+                                                  ValueGatheringTaskResults *res) {
+  LOG(raft::util::kRaft, "[CC] [S%d] Start running Gather Value Task, k=%d, m=%d", id_, task->k,
+      task->m);
+  std::atomic<bool> gather_value_done = false;
+
+  int recover_F = GetServerNum() / 2, recover_k = GetServerNum() - recover_F;
+  int r = raft::code_conversion::get_chunk_count(recover_k) / recover_k;
+  raft::code_conversion::CodeConversionManagement ccm(recover_k, recover_F, r);
+  std::vector<raft::Slice> copied_slice;
+
+  // Use lock to prevent concurrent callback function running
+  std::mutex mtx;
+
+  auto call_back = [=, &ccm, &gather_value_done, &mtx,
+                    &copied_slice](const GetValueResponse &resp) {
+    LOG(raft::util::kRaft, "[CC] [S%d] Recv GetValue Response from S%d", id_, resp.reply_server_id);
+    if (resp.err != kOk) {
+      return;
+    }
+    std::scoped_lock<std::mutex> lck(mtx);
+
+    auto fmt = KvServiceClient::DecodeString(const_cast<std::string *>(&resp.value));
+    LOG(raft::util::kRaft, "[CC] [S%d] Decode Value: k=%d, m=%d, fragid=%d", id_, fmt.k, fmt.m,
+        fmt.frag_id)
+
+    // This is an full entry
+    if (fmt.k == 1 && fmt.m == 0) {
+      GetKeyFromPrefixLengthFormat(fmt.frag.data(), res->value);
+      res->err = kOk;
+      gather_value_done.store(true);
+      LOG(raft::util::kRaft, "[CC] [S%d] Get Full Entry, value=%s", id_, res->value->c_str());
+      return;
+    } else {
+      // Collect a fragment
+      if (fmt.k == task->k && fmt.m == task->m) {
+        auto slice = raft::Slice::Copy(fmt.frag);
+        copied_slice.emplace_back(slice);
+        raft::code_conversion::ChunkVector cv;
+        cv.Deserialize(slice);
+        task->decode_input->insert_or_assign(fmt.frag_id, cv);
+        LOG(raft::util::kRaft, "[CC] [S%d] Add CV(size=%d) From S%d", id_, cv.size(), fmt.frag_id);
+      }
+
+      // The gather value task is not done, and there is enough fragments to
+      // decode the entry
+      if (!gather_value_done.load() && task->decode_input->size() >= task->k) {
+        raft::Slice results;
+        auto stat = ccm.DecodeCollectedChunkVec(*(task->decode_input), &results);
+        if (stat) {
+          GetKeyFromPrefixLengthFormat(results.data(), res->value);
+          res->err = kOk;
+          gather_value_done.store(true);
+          LOG(raft::util::kRaft, "[CC] [S%d] Decode Value Succ, res->value=%s", id_,
+              res->value->c_str());
+        } else {
+          res->err = kKVDecodeFail;
+          LOG(raft::util::kRaft, "[CC] [S%d] Decode Value Fail", id_);
+        }
+      }
+    }
+  };
+
+  auto clear_gather_ctx = [=]() {
+    for (auto &slice : copied_slice) {
+      delete[] slice.data();
+    }
+  };
+
+  auto get_req = GetValueRequest{task->key, task->read_index};
+  for (auto &[id, server] : kv_peers_) {
+    if (id == task->replied_id) {
+      continue;
+    }
+    auto stub = reinterpret_cast<rpc::KvServerRPCClient *>(server);
+    stub->SetRPCTimeOutMs(1000);
+    auto resp = stub->GetValue(get_req);
+    if (resp.err == kOk) {
+      call_back(resp);
+    }
+    if (gather_value_done.load()) {
+      break;
+    }
+    // Send in an async way
+    // stub->GetValue(get_req, call_back);
+  }
+
+  raft::util::Timer timer;
+  timer.Reset();
+  while (timer.ElapseMilliseconds() <= 1000) {
+    if (gather_value_done.load() == true) {
+      clear_gather_ctx();
+      return;
+    } else {
+      // sleepMs(100);
+    }
+  }
+  //  Set the error code
+  if (res->err == kOk) {
+    res->err = kRequestExecTimeout;
+  }
+  clear_gather_ctx();
+}
+
 }  // namespace kv
