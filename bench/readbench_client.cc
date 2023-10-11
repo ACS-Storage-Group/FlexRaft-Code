@@ -114,7 +114,7 @@ void ExecuteBench(kv::KvServiceClient *client, const std::vector<KvPair> &bench)
     }
   }
 
-  printf("[Warmup Process Done]\n");
+  printf("\n[Warmup Process Done]\n");
 
   std::this_thread::sleep_for(std::chrono::seconds(3));
 
@@ -152,7 +152,7 @@ void ExecuteBench(kv::KvServiceClient *client, const std::vector<KvPair> &bench)
       // }
     }
     if (succ_cnt % 100 == 0) {
-      printf("\r[Readbench already done: %d]", succ_cnt);
+      std::cout << "\r[Readbench Already Execute " << succ_cnt << " Ops]" << std::flush;
     }
   }
   printf("[Get Results][Succ Count=%d]\n", succ_cnt);

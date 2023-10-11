@@ -26,7 +26,7 @@ DEFINE_int32(write_num, 0, "The number of write operations to execute");
 using KvPair = std::pair<std::string, std::string>;
 const int kVerboseInterval = 100;
 
-const int K = 4;
+const int K = 5;
 const int chunk_cnt = raft::code_conversion::get_chunk_count(K);
 
 struct BenchConfiguration {
