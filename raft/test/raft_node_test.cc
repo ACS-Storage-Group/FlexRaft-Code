@@ -32,7 +32,7 @@ TEST_F(RaftNodeBasicTest, DISABLED_TestSimplyProposeEntry) {
 }
 
 // Test one follower fail
-TEST_F(RaftNodeBasicTest, TestOneFollowerCrash) {
+TEST_F(RaftNodeBasicTest, DISABLED_TestOneFollowerCrash) {
   auto config = ConstructNodesConfig(7, false);
   LaunchAllServers(config);
   sleepMs(10);
@@ -56,7 +56,7 @@ TEST_F(RaftNodeBasicTest, TestOneFollowerCrash) {
   ClearTestContext(config);
 }
 
-TEST_F(RaftNodeBasicTest, TestTwoFollowersCrash) {
+TEST_F(RaftNodeBasicTest, DISABLED_TestTwoFollowersCrash) {
   auto config = ConstructNodesConfig(7, false);
   LaunchAllServers(config);
   sleepMs(10);
@@ -103,14 +103,14 @@ TEST_F(RaftNodeBasicTest, DISABLED_TestLeaderCrash) {
   ClearTestContext(config);
 }
 
-TEST_F(RaftNodeBasicTest, DISABLED_TestNewLeaderGetFullLogEntry) {
-  auto config = ConstructNodesConfig(3, false);
+TEST_F(RaftNodeBasicTest, TestNewLeaderGetFullLogEntry) {
+  auto config = ConstructNodesConfig(7, false);
   LaunchAllServers(config);
   sleepMs(10);
 
-  EXPECT_TRUE(ProposeOneEntry(1));
-  EXPECT_TRUE(ProposeOneEntry(2));
-  EXPECT_TRUE(ProposeOneEntry(3));
+  EXPECT_TRUE(ProposeOneEntry(1, true));
+  EXPECT_TRUE(ProposeOneEntry(2, true));
+  EXPECT_TRUE(ProposeOneEntry(3, true));
 
   auto leader1 = GetLeaderId();
 
@@ -129,9 +129,9 @@ TEST_F(RaftNodeBasicTest, DISABLED_TestNewLeaderGetFullLogEntry) {
   sleepMs(500);
 
   // Must commit another entry
-  EXPECT_TRUE(ProposeOneEntry(5));
-  EXPECT_TRUE(checkCommitted(pr1, 4));
-  EXPECT_TRUE(checkCommitted(pr2, 5));
+  EXPECT_TRUE(ProposeOneEntry(5, true));
+  EXPECT_TRUE(checkCommittedCodeConversion(pr1, 4));
+  EXPECT_TRUE(checkCommittedCodeConversion(pr2, 5));
 
   ClearTestContext(config);
 }

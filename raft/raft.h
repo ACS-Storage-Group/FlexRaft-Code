@@ -152,6 +152,68 @@ struct SequenceGenerator {
   uint64_t seq;
 };
 
+struct PreLeaderStripeStoreCodeConversion {
+  PreLeaderStripeStoreCodeConversion() = default;
+
+  raft_index_t start_index, end_index;
+  // Recovery entities for each entry to be recovered
+  std::vector<std::map<raft_node_id_t, CODE_CONVERSION_NAMESPACE::ChunkVector>> cc_ents_;
+  bool response_[15];
+  int node_num;
+  raft_node_id_t me;
+
+  void InitRequestFragmentsTask(raft_index_t start, raft_index_t end, int node_num,
+                                raft_node_id_t me) {
+    this->start_index = start;
+    this->end_index = end;
+    this->node_num = node_num;
+    this->me = me;
+
+    cc_ents_.clear();
+    cc_ents_.reserve(end - start + 1);
+
+    // Init the data store part
+    int ent_cnt = end - start + 1;
+    for (int i = 0; i < ent_cnt; ++i) {
+      cc_ents_.emplace_back();
+    }
+
+    memset(response_, false, sizeof(response_));
+    response_[me] = true;
+  }
+
+  void UpdateResponseState(raft_node_id_t id) { response_[id] = true; }
+
+  raft_index_t GetStartIndex() const { return start_index; }
+  raft_index_t GetEndIndex() const { return end_index; }
+  int GetRecoverEntryCount() const { return end_index - start_index + 1; }
+
+  bool IsCollected(raft_node_id_t id) const { return response_[id]; }
+
+  int CollectedFragmentsCnt() const {
+    int ret = 0;
+    for (int i = 0; i < node_num; ++i) {
+      ret += response_[i];
+    }
+    return ret;
+  }
+
+  // Add a ChunkVector belonging to a specific node at a specified index position
+  void AddChunkVector(raft_index_t idx, const LogEntry &entry, raft_frag_id_t chunk_id) {
+    if (idx < start_index || idx > end_index) {
+      // NOTE: idx > end_index indicates that current leader receives an entry
+      // with index higher than leader's last index, in that way, it simply cut
+      // off these entries because the majority of the servers doesn't have this
+      // entry(otherwise the leader won't win this election)
+      return;
+    }
+    auto array_index = idx - start_index;
+    auto cv = entry.GetOriginalChunkVector();
+    cv.Concatenate(entry.GetReservedChunkVector());
+    cc_ents_[array_index].insert_or_assign(chunk_id, cv);
+  }
+};
+
 struct PreLeaderStripeStore {
   PreLeaderStripeStore() = default;
 
@@ -253,6 +315,9 @@ class RaftState {
 
   void Process(RequestFragmentsArgs *args, RequestFragmentsReply *reply);
   void Process(RequestFragmentsReply *reply);
+
+  void ProcessCodeConversion(RequestFragmentsArgs *args, RequestFragmentsReply *reply);
+  void ProcessCodeConversion(RequestFragmentsReply *reply);
 
   // This is a command from upper level application, the raft instance is
   // supposed to copy this entry to its own log and replicate it to other
@@ -380,6 +445,9 @@ class RaftState {
   // Collect all needed fragments
   void collectFragments();
 
+  // Collect chunk data from followers before converting to be the real leader
+  void collectFragmentsCodeConversion();
+
   void incrementVoteMeCnt() { vote_me_cnt_++; }
 
   // For a cluster consists of 2F+1 server, F is called the liveness
@@ -406,7 +474,12 @@ class RaftState {
   // decoded into complete log entries
   void PreLeaderBecomeLeader();
 
+  // Specialized process for code conversion
+  void PreLeaderBecomeLeaderCodeConversion();
+
   void DecodeCollectedStripe();
+
+  void DecodeCollectedStripeCodeConversion();
 
   // Replicate a new proposed entry indexed by specified raft_index to alive
   // servers
@@ -516,6 +589,10 @@ class RaftState {
 
   // A place for storing fragments come from RequestFragments
   PreLeaderStripeStore preleader_stripe_store_;
+
+  PreLeaderStripeStoreCodeConversion preleader_stripe_store_cc_;
+
+  auto& PreLeaderCodeConversionCtx() { return preleader_stripe_store_cc_; }
 
  public:
   std::set<raft_node_id_t> peers_;

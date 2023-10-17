@@ -509,6 +509,52 @@ void RaftState::Process(RequestFragmentsArgs *args, RequestFragmentsReply *reply
   return;
 }
 
+void RaftState::ProcessCodeConversion(RequestFragmentsArgs *args, RequestFragmentsReply *reply) {
+  assert(args != nullptr && reply != nullptr);
+
+  live_monitor_.UpdateLiveness(args->leader_id);
+
+  std::scoped_lock<std::mutex> lck(mtx_);
+
+  LOG(util::kRaft, "[CC] S%d RECV ReqFrag From S%d(EC) (T%d SI=%d EI=%d)", id_, args->leader_id,
+      args->term, args->start_index, args->last_index);
+
+  reply->reply_id = id_;
+  reply->start_index = args->start_index;
+
+  if (args->term < CurrentTerm()) {
+    reply->term = CurrentTerm();
+    reply->entry_cnt = 0;
+    reply->fragments.clear();
+    reply->success = false;
+
+    LOG(util::kRaft, "[CC] S%d REFUSE ReqFrag: Higher Term(%d>%d)", id_, CurrentTerm(), args->term);
+    return;
+  }
+
+  if (args->term > CurrentTerm() || Role() == kCandidate) {
+    convertToFollower(args->term);
+  }
+  resetElectionTimer();
+
+  raft_index_t raft_index = args->start_index;
+  for (; raft_index <= args->last_index; ++raft_index) {
+    if (auto ptr = lm_->GetSingleLogEntry(raft_index); ptr) {
+      reply->fragments.push_back(*ptr);
+      LOG(util::kRaft, "[CC] S%d Reply Fragments(I%d Org%d Res%d)", id_, ptr->Index(),
+          ptr->OriginalChunkVectorRef().size(), ptr->ReservedChunkVectorRef().size());
+    } else {
+      break;
+    }
+  }
+  LOG(util::kRaft, "[CC] S%d Submit fragments(I%d->I%d)", id_, args->start_index, raft_index - 1);
+
+  reply->term = CurrentTerm();
+  reply->success = true;
+  reply->entry_cnt = reply->fragments.size();
+  return;
+}
+
 void RaftState::Process(RequestFragmentsReply *reply) {
   assert(reply != nullptr);
 
@@ -555,6 +601,56 @@ void RaftState::Process(RequestFragmentsReply *reply) {
 
   preleader_stripe_store_.UpdateResponseState(reply->reply_id);
   PreLeaderBecomeLeader();
+  return;
+}
+
+void RaftState::ProcessCodeConversion(RequestFragmentsReply *reply) {
+  assert(reply != nullptr);
+
+  live_monitor_.UpdateLiveness(reply->reply_id);
+
+  std::scoped_lock<std::mutex> lck(mtx_);
+
+  LOG(util::kRaft, "[CC] S%d RECV ReqFragReply From S%d", id_, reply->reply_id);
+
+  if (Role() != kPreLeader || reply->term < CurrentTerm()) {
+    return;
+  }
+
+  if (reply->term > CurrentTerm()) {
+    convertToFollower(reply->term);
+    return;
+  }
+
+  LOG(util::kRaft, "[CC] S%d ReqFrag Resp (Cnt=%d)", id_, reply->entry_cnt);
+
+  // May ommit duplicate response
+  if (PreLeaderCodeConversionCtx().IsCollected(reply->reply_id)) {
+    LOG(util::kRaft, "[CC] S%d Ommit ReqFragReply from S%d", id_, reply->reply_id);
+    return;
+  }
+
+  // TODO: RequestFragments may occur multiple times
+  // TODO: Store collected fragments into some place and decode them to get the
+  // complete entry
+  //
+  int check_idx = 0;
+  for (const auto &entry : reply->fragments) {
+    assert(check_idx + reply->start_index == entry.Index());
+
+    // Debug:
+    // --------------------------------------------------------------------
+    LOG(util::kRaft, "[CC] S%d Add CV(Org%d, Res%d) at I%d, FragId=%d", id_,
+        entry.GetOriginalChunkVector().size(), entry.GetReservedChunkVector().size(), entry.Index(),
+        reply->reply_id);
+    // --------------------------------------------------------------------
+    PreLeaderCodeConversionCtx().AddChunkVector(entry.Index(), entry,
+                                                static_cast<raft_frag_id_t>(reply->reply_id));
+    check_idx++;
+  }
+
+  PreLeaderCodeConversionCtx().UpdateResponseState(reply->reply_id);
+  PreLeaderBecomeLeaderCodeConversion();
   return;
 }
 
@@ -962,7 +1058,7 @@ void RaftState::convertToPreLeader() {
     convertToLeader();
     return;
   }
-  collectFragments();
+  collectFragmentsCodeConversion();
 }
 
 void RaftState::resetNextIndexAndMatchIndex() {
@@ -1080,6 +1176,52 @@ void RaftState::collectFragments() {
   }
 }
 
+void RaftState::collectFragmentsCodeConversion() {
+  // Initiate a fragments collection task
+  LOG(util::kRaft, "[CC] S%d Collect Fragments(I%d->I%d)", id_, CommitIndex() + 1,
+      lm_->LastLogEntryIndex());
+
+  // Initiate a request fragments task
+  auto recover_start_index = CommitIndex() + 1;
+  PreLeaderCodeConversionCtx().InitRequestFragmentsTask(
+      recover_start_index, lm_->LastLogEntryIndex(), peers_.size() + 1, id_);
+  preleader_timer_.Reset();
+  preleader_recover_ent_cnt_ = lm_->LastLogEntryIndex() + 1 - recover_start_index;
+
+  for (int i = 0; i < PreLeaderCodeConversionCtx().GetRecoverEntryCount(); ++i) {
+    raft_index_t r_idx = i + PreLeaderCodeConversionCtx().GetStartIndex();
+    auto ent = lm_->GetSingleLogEntry(r_idx);
+    assert(ent != nullptr);
+
+    if (ent->Type() == kFragments) {
+      PreLeaderCodeConversionCtx().AddChunkVector(r_idx, *ent, static_cast<raft_frag_id_t>(id_));
+
+      LOG(util::kRaft, "[CC] S%d Add FragId%d into Stripe I%d", id_,
+          static_cast<raft_frag_id_t>(id_), ent->Index());
+    } else if (ent->Type() == kNormal) {
+      // No need to collect this entry since leader has full entry
+      PreLeaderCodeConversionCtx().AddChunkVector(r_idx, *ent, static_cast<raft_frag_id_t>(id_));
+
+      LOG(util::kRaft, "[CC] S%d Skip Collecting I%d because of full entry", id_, ent->Index());
+    } else {
+      // This ent might be a null entry which carries no data
+    }
+  }
+
+  RequestFragmentsArgs args;
+  args.term = CurrentTerm();
+  args.leader_id = id_;
+  args.start_index = recover_start_index;
+  args.last_index = lm_->LastLogEntryIndex();
+  for (auto id : peers_) {
+    if (id == id_) {
+      continue;
+    }
+    auto rpc = rpc_clients_[id];
+    rpc->sendMessage(args);
+  }
+}
+
 void RaftState::resetElectionTimer() {
   srand(id_);
   auto id_rand = rand();
@@ -1158,7 +1300,7 @@ void RaftState::tickOnPreLeader() {
   if (preleader_timer_.ElapseMilliseconds() < config::kCollectFragmentsInterval) {
     return;
   }
-  collectFragments();
+  collectFragmentsCodeConversion();
   resetPreLeaderTimer();
 }
 
@@ -1243,6 +1385,23 @@ void RaftState::AdjustChunkDistributionCodeConversion(raft_index_t raft_index,
 
   auto ccm = cc_managment_[raft_index];
   auto stripe = encoded_stripe_[raft_index];
+
+  if (ccm == nullptr) {
+    // Create new CCM and Stripe for this entry's first Encoding Stripe
+    raft_encoding_param_t encode_k = live_vec.size() - livenessLevel();
+    auto total_chunk_num = CODE_CONVERSION_NAMESPACE::get_chunk_count(encode_k);
+    auto r = total_chunk_num / encode_k;
+    auto new_ccm = new CODE_CONVERSION_NAMESPACE::CodeConversionManagement(encode_k, livenessLevel(), r);
+    auto new_stripe = new Stripe();
+
+    EncodeRaftEntryForCodeConversion(raft_index, live_vec, new_ccm, new_stripe, static_encoder_);
+
+    encoded_stripe_.insert_or_assign(raft_index, new_stripe);
+    cc_managment_.insert_or_assign(raft_index, new_ccm);
+
+    ccm = new_ccm;
+    stripe = new_stripe;
+  }
 
   assert(ccm != nullptr);
   assert(stripe != nullptr);
@@ -1737,6 +1896,88 @@ void RaftState::PreLeaderBecomeLeader() {
     DecodeCollectedStripe();
     convertToLeader();
   }
+}
+
+void RaftState::PreLeaderBecomeLeaderCodeConversion() {
+  LOG(util::kRaft, "[CC] S%d PreLeaderBecomeLeader, Get Response: %d", id_,
+      PreLeaderCodeConversionCtx().CollectedFragmentsCnt());
+  if (PreLeaderCodeConversionCtx().CollectedFragmentsCnt() >= livenessLevel() + 1) {
+    LOG(util::kRaft, "[CC] S%d Rebuild Original Entry", id_);
+    DecodeCollectedStripeCodeConversion();
+    convertToLeader();
+  }
+}
+
+void RaftState::DecodeCollectedStripeCodeConversion() {
+  LOG(util::kRaft, "[CC] S%d Decode Collected Stripes", id_);
+
+  int k = GetClusterServerNumber() - livenessLevel();
+  int F = livenessLevel();
+  int r = CODE_CONVERSION_NAMESPACE::get_chunk_count(k) / k;
+
+  CODE_CONVERSION_NAMESPACE::CodeConversionManagement ccm(k, F, r);
+
+  for (int i = 0; i < PreLeaderCodeConversionCtx().GetRecoverEntryCount(); ++i) {
+    auto &input = PreLeaderCodeConversionCtx().cc_ents_[i];
+    if (input.size() == 0) {
+      continue;
+    }
+
+    auto r_idx = PreLeaderCodeConversionCtx().GetStartIndex() + i;
+    LogEntry *ent = lm_->GetSingleLogEntry(r_idx);
+    LogEntry recover_ent;
+
+    Slice decode_results;
+    auto stat = ccm.DecodeCollectedChunkVec(input, &decode_results);
+    if (!stat) {
+      auto last_index = lm_->LastLogEntryIndex();
+      lm_->DeleteLogEntriesFrom(r_idx);
+      LOG(util::kRaft, "CodeConversion Decode Original Data Failed, Discard from I%d", r_idx);
+      if (storage_ != nullptr) {
+        storage_->DeleteEntriesFrom(r_idx);
+        storage_->Sync();
+      }
+      if (reserve_storage_ != nullptr) {
+        reserve_storage_->DeleteEntriesFrom(r_idx);
+        reserve_storage_->Sync();
+      }
+      return;
+    }
+
+    // First recover the not encoded slice part:
+    int not_encoded_size = ent->NotEncodedSlice().size();
+
+    // Move the data (not encoded + encoded) together 
+    auto data = new char[not_encoded_size + decode_results.size() + 16];
+    std::memcpy(data, ent->NotEncodedSlice().data(), ent->NotEncodedSlice().size());
+    std::memcpy(data + ent->NotEncodedSlice().size(), decode_results.data(), decode_results.size());
+    delete[] decode_results.data(); // Release the memory of temporary decode results
+
+    LOG(util::kRaft, "[CC] S%d Estimate NotEncodeSize=%d EncodedSize=%d", id_, not_encoded_size,
+        decode_results.size());
+
+    recover_ent.SetIndex(ent->Index());
+    recover_ent.SetTerm(ent->Term());
+    recover_ent.SetType(kNormal);
+    recover_ent.SetCommandData(Slice(data, ent->CommandLength()));
+    recover_ent.SetStartOffset(not_encoded_size);
+    recover_ent.SetChunkInfo(ChunkInfo{0, ent->Index()});
+
+    lm_->OverWriteLogEntry(recover_ent, r_idx);
+    LOG(util::kRaft, "[CC] S%d Overwrite Decoded Entry I%d", id_, r_idx);
+    if (storage_ != nullptr) {
+      storage_->OverwriteEntry(r_idx, recover_ent);
+    }
+  }
+
+  if (storage_ != nullptr) {
+    storage_->Sync();
+  }
+
+  if (reserve_storage_ != nullptr) {
+    reserve_storage_->Sync();
+  }
+  return;
 }
 
 // TODO: Update logic

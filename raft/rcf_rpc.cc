@@ -80,7 +80,7 @@ RCF::ByteBuffer RaftRPCService::RequestFragments(const RCF::ByteBuffer &arg_buf)
 
   auto serializer = Serializer::NewSerializer();
   serializer.Deserialize(&arg_buf, &args);
-  raft_->Process(&args, &reply);
+  raft_->ProcessCodeConversion(&args, &reply);
 
   RCF::ByteBuffer reply_buf(serializer.getSerializeSize(reply));
   serializer.Serialize(&reply, &reply_buf);
@@ -246,7 +246,8 @@ void RCFRpcClient::onRequestFragmentsComplete(RCF::Future<RCF::ByteBuffer> ret,
     RCF::ByteBuffer ret_buf = *ret;
     RequestFragmentsReply reply;
     Serializer::NewSerializer().Deserialize(&ret_buf, &reply);
-    raft->Process(&reply);
+    // raft->Process(&reply);
+    raft->ProcessCodeConversion(&reply);
   }
 }
 
