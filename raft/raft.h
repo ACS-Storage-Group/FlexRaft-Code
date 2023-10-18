@@ -349,7 +349,8 @@ class RaftState {
   // ALERT: This public interface should only be used in test case
   void SetVoteCnt(int cnt) { vote_me_cnt_ = cnt; }
 
-  raft_index_t CommitIndex() const { return commit_index_; }
+  // To test preleader performance, set the CommitIndex to be 1 all the time
+  raft_index_t CommitIndex() const { return 0; }
   void SetCommitIndex(raft_index_t raft_index) { commit_index_ = raft_index; }
 
   raft_index_t LastLogIndex() const { return lm_->LastLogEntryIndex(); }
