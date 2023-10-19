@@ -1911,7 +1911,7 @@ void RaftState::PreLeaderBecomeLeaderCodeConversion() {
 
 void RaftState::DecodeCollectedStripeCodeConversion() {
   LOG(util::kRaft, "[CC] S%d Decode Collected Stripes", id_);
-  util::LatencyGuard guard([](uint64_t d) { printf("Decode Stripe Time: %lu us\n", d); });
+  // util::LatencyGuard guard([](uint64_t d) { printf("Decode Stripe Time: %lu us\n", d); });
 
   int k = GetClusterServerNumber() - livenessLevel();
   int F = livenessLevel();
@@ -1955,8 +1955,6 @@ void RaftState::DecodeCollectedStripeCodeConversion() {
     if (not_encoded_size == 0) {
       recover_cmd_data = decode_results;
     } else {
-      util::LatencyGuard guard([](uint64_t d) { printf("Decode Copy Data Cost: %lu us\n", d); });
-
       // Move the data (not encoded + encoded) together
       auto data = new char[not_encoded_size + decode_results.size() + 16];
       std::memcpy(data, ent->NotEncodedSlice().data(), ent->NotEncodedSlice().size());

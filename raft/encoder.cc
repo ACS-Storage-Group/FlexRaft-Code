@@ -182,7 +182,6 @@ bool Encoder::DecodeSliceHelper(const EncodingResults &fragments, int k, int m, 
 bool Encoder::DecodeSlice(const EncodingResults &fragments, int k, int m, Slice *results) {
   // For this special case, directly returns the identical entry. So that
   // DecodeSlice is a dual form of Encode Slice
-  util::LatencyGuard guard([](uint64_t d) {printf("Encoder::DecodeSlice cost: %lu us \n", d); });
   if (k == 1) {
     *results = Slice::Copy(fragments.begin()->second);
     return true;

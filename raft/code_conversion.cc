@@ -294,7 +294,7 @@ void CodeConversionManagement::EncodeReservedChunksAndAssignToNode(const ChunkDi
 void CodeConversionManagement::EncodeForPlacement(const Slice& slice,
                                                   const std::vector<bool>& live_vec,
                                                   StaticEncoder* static_encoder) {
-  util::LatencyGuard guard([](uint64_t us) { printf("Encode cost: %lu us\n", us); });
+  // util::LatencyGuard guard([](uint64_t us) { printf("Encode cost: %lu us\n", us); });
   PrepareOriginalChunks(slice, static_encoder);
 
   ChunkDistribution cd(k_, F_, r_);
@@ -319,7 +319,6 @@ void CodeConversionManagement::AdjustChunkDistribution(const std::vector<bool>& 
 
 std::map<raft_node_id_t, Slice> CodeConversionManagement::RecoverReservedChunks(
     const std::map<raft_node_id_t, ChunkVector>& input) {
-  util::LatencyGuard guard([&](uint64_t d) { printf("RecoverReservedChunks cost: %lu us\n", d); });
   int chunk_cnt_each = 0;
   std::set<raft_node_id_t> fail_server_sets;
   for (const auto& [id, chunk_vec] : input) {
@@ -405,7 +404,6 @@ std::map<raft_node_id_t, Slice> CodeConversionManagement::RecoverReservedChunks(
 
 bool CodeConversionManagement::DecodeCollectedChunkVec(
     const std::map<raft_node_id_t, ChunkVector>& input, Slice* slice) {
-  util::LatencyGuard guard([](uint64_t us) { printf("Decode cost: %lu us\n", us); });
   Encoder::EncodingResults final_decode_input = RecoverReservedChunks(input);
   Encoder final_decoder;
 
