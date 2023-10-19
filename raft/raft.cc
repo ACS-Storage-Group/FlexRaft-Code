@@ -1910,6 +1910,7 @@ void RaftState::PreLeaderBecomeLeaderCodeConversion() {
 
 void RaftState::DecodeCollectedStripeCodeConversion() {
   LOG(util::kRaft, "[CC] S%d Decode Collected Stripes", id_);
+  util::LatencyGuard guard([](uint64_t d){ printf("Decode Stripe Time: %lu us\n", d); });
 
   int k = GetClusterServerNumber() - livenessLevel();
   int F = livenessLevel();
