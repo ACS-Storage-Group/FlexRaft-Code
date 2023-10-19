@@ -1949,14 +1949,21 @@ void RaftState::DecodeCollectedStripeCodeConversion() {
     // First recover the not encoded slice part:
     int not_encoded_size = ent->NotEncodedSlice().size();
 
-    // Move the data (not encoded + encoded) together
-    auto data = new char[not_encoded_size + decode_results.size() + 16];
-    {
+    Slice recover_cmd_data;
+
+    // A Fast Path:
+    if (not_encoded_size == 0) {
+      recover_cmd_data = decode_results;
+    } else {
       util::LatencyGuard guard([](uint64_t d) { printf("Decode Copy Data Cost: %lu us\n", d); });
+
+      // Move the data (not encoded + encoded) together
+      auto data = new char[not_encoded_size + decode_results.size() + 16];
       std::memcpy(data, ent->NotEncodedSlice().data(), ent->NotEncodedSlice().size());
       std::memcpy(data + ent->NotEncodedSlice().size(), decode_results.data(),
                   decode_results.size());
       delete[] decode_results.data();  // Release the memory of temporary decode results
+      recover_cmd_data = Slice(data, ent->CommandLength());
     }
 
     LOG(util::kRaft, "[CC] S%d Estimate NotEncodeSize=%d EncodedSize=%d", id_, not_encoded_size,
@@ -1965,7 +1972,7 @@ void RaftState::DecodeCollectedStripeCodeConversion() {
     recover_ent.SetIndex(ent->Index());
     recover_ent.SetTerm(ent->Term());
     recover_ent.SetType(kNormal);
-    recover_ent.SetCommandData(Slice(data, ent->CommandLength()));
+    recover_ent.SetCommandData(recover_cmd_data);
     recover_ent.SetStartOffset(not_encoded_size);
     recover_ent.SetChunkInfo(ChunkInfo{0, ent->Index()});
 
