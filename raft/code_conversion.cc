@@ -409,15 +409,25 @@ bool CodeConversionManagement::DecodeCollectedChunkVec(
   Encoder::EncodingResults final_decode_input = RecoverReservedChunks(input);
   Encoder final_decoder;
 
-  iter::NewContainerIterator(input)
-      .filter([](auto elem) { return elem.second.as_vec().size() > 0; })
-      .for_each([&](auto elem) {
-        if (final_decode_input.size() >= k_) {
-          return;
-        }
-        const auto& [id, v] = elem;
-        final_decode_input.emplace(id, Slice::Combine(v.SubVec(0, r_).as_slice_vec()));
-      });
+  // iter::NewContainerIterator(input)
+  //     .filter([](auto elem) { return elem.second.as_vec().size() > 0; })
+  //     .for_each([&](auto elem) {
+  //       if (final_decode_input.size() >= k_) {
+  //         return;
+  //       }
+  //       const auto& [id, v] = elem;
+  //       final_decode_input.emplace(id, Slice::Combine(v.SubVec(0, r_).as_slice_vec()));
+  //     });
+  
+  for (const auto& [id, cv] : input) {
+    if (cv.size() == 0) {
+      continue;
+    }
+    if (final_decode_input.size() >= k_) {
+      break;
+    }
+    final_decode_input.emplace(id, Slice::Combine(cv.SubVec(0, r_).as_slice_vec()));
+  }
 
   auto ret = final_decoder.DecodeSlice(final_decode_input, k_, F_, slice);
   return ret;
