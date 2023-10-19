@@ -319,6 +319,7 @@ void CodeConversionManagement::AdjustChunkDistribution(const std::vector<bool>& 
 
 std::map<raft_node_id_t, Slice> CodeConversionManagement::RecoverReservedChunks(
     const std::map<raft_node_id_t, ChunkVector>& input) {
+  util::LatencyGuard guard([&](uint64_t d) { printf("RecoverReservedChunks cost: %lu us\n", d); });
   int chunk_cnt_each = 0;
   std::set<raft_node_id_t> fail_server_sets;
   for (const auto& [id, chunk_vec] : input) {
