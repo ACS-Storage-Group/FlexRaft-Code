@@ -246,7 +246,7 @@ struct LatencyGuard {
 
   LatencyGuard(CallBack cb) : start_(NowTime()), cb_(cb) {}
   ~LatencyGuard() {
-// #define ENABLE_LATENCY_GUARD
+#define ENABLE_LATENCY_GUARD
 #ifdef ENABLE_LATENCY_GUARD
     auto dura = DurationToMicros(start_, NowTime());
     cb_(dura);
