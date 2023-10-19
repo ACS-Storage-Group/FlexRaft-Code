@@ -306,7 +306,7 @@ void CodeConversionManagement::EncodeForPlacement(const Slice& slice,
 }
 
 void CodeConversionManagement::AdjustChunkDistribution(const std::vector<bool>& live_vec) {
-  util::LatencyGuard guard([](uint64_t us) { printf("Adjust cost: %lu us\n", us); });
+  // util::LatencyGuard guard([](uint64_t us) { printf("Adjust cost: %lu us\n", us); });
   if (live_vec == GetLiveVecForCurrDistribution()) {
     // No need to adjust the chunk distribution if the liveness vector has not changed
     return;
@@ -418,7 +418,8 @@ bool CodeConversionManagement::DecodeCollectedChunkVec(
         final_decode_input.emplace(id, Slice::Combine(v.SubVec(0, r_).as_slice_vec()));
       });
 
-  return final_decoder.DecodeSlice(final_decode_input, k_, F_, slice);
+  auto ret = final_decoder.DecodeSlice(final_decode_input, k_, F_, slice);
+  return ret;
 }
 
 void CodeConversionManagement::AdjustChunkDistribution(const ChunkDistribution& cd) {

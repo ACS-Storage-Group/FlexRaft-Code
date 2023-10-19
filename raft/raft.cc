@@ -1391,7 +1391,8 @@ void RaftState::AdjustChunkDistributionCodeConversion(raft_index_t raft_index,
     raft_encoding_param_t encode_k = live_vec.size() - livenessLevel();
     auto total_chunk_num = CODE_CONVERSION_NAMESPACE::get_chunk_count(encode_k);
     auto r = total_chunk_num / encode_k;
-    auto new_ccm = new CODE_CONVERSION_NAMESPACE::CodeConversionManagement(encode_k, livenessLevel(), r);
+    auto new_ccm =
+        new CODE_CONVERSION_NAMESPACE::CodeConversionManagement(encode_k, livenessLevel(), r);
     auto new_stripe = new Stripe();
 
     EncodeRaftEntryForCodeConversion(raft_index, live_vec, new_ccm, new_stripe, static_encoder_);
@@ -1910,7 +1911,7 @@ void RaftState::PreLeaderBecomeLeaderCodeConversion() {
 
 void RaftState::DecodeCollectedStripeCodeConversion() {
   LOG(util::kRaft, "[CC] S%d Decode Collected Stripes", id_);
-  util::LatencyGuard guard([](uint64_t d){ printf("Decode Stripe Time: %lu us\n", d); });
+  util::LatencyGuard guard([](uint64_t d) { printf("Decode Stripe Time: %lu us\n", d); });
 
   int k = GetClusterServerNumber() - livenessLevel();
   int F = livenessLevel();
@@ -1948,11 +1949,15 @@ void RaftState::DecodeCollectedStripeCodeConversion() {
     // First recover the not encoded slice part:
     int not_encoded_size = ent->NotEncodedSlice().size();
 
-    // Move the data (not encoded + encoded) together 
+    // Move the data (not encoded + encoded) together
     auto data = new char[not_encoded_size + decode_results.size() + 16];
-    std::memcpy(data, ent->NotEncodedSlice().data(), ent->NotEncodedSlice().size());
-    std::memcpy(data + ent->NotEncodedSlice().size(), decode_results.data(), decode_results.size());
-    delete[] decode_results.data(); // Release the memory of temporary decode results
+    {
+      util::LatencyGuard guard([](uint64_t d) { printf("Decode Copy Data Cost: %lu us\n", d); });
+      std::memcpy(data, ent->NotEncodedSlice().data(), ent->NotEncodedSlice().size());
+      std::memcpy(data + ent->NotEncodedSlice().size(), decode_results.data(),
+                  decode_results.size());
+      delete[] decode_results.data();  // Release the memory of temporary decode results
+    }
 
     LOG(util::kRaft, "[CC] S%d Estimate NotEncodeSize=%d EncodedSize=%d", id_, not_encoded_size,
         decode_results.size());
@@ -1975,9 +1980,10 @@ void RaftState::DecodeCollectedStripeCodeConversion() {
     storage_->Sync();
   }
 
-  if (reserve_storage_ != nullptr) {
-    reserve_storage_->Sync();
-  }
+  // No need to manage the reserve storage part
+  // if (reserve_storage_ != nullptr) {
+  //   reserve_storage_->Sync();
+  // }
   return;
 }
 
