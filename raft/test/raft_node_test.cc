@@ -32,7 +32,7 @@ TEST_F(RaftNodeBasicTest, DISABLED_TestSimplyProposeEntry) {
 }
 
 // Test one follower fail
-TEST_F(RaftNodeBasicTest, DISABLED_TestOneFollowerCrash) {
+TEST_F(RaftNodeBasicTest, TestOneFollowerCrash) {
   auto config = ConstructNodesConfig(7, false);
   LaunchAllServers(config);
   sleepMs(10);
@@ -56,7 +56,7 @@ TEST_F(RaftNodeBasicTest, DISABLED_TestOneFollowerCrash) {
   ClearTestContext(config);
 }
 
-TEST_F(RaftNodeBasicTest, DISABLED_TestTwoFollowersCrash) {
+TEST_F(RaftNodeBasicTest, TestTwoFollowersCrash) {
   auto config = ConstructNodesConfig(7, false);
   LaunchAllServers(config);
   sleepMs(10);

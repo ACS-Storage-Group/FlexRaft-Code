@@ -541,8 +541,8 @@ void RaftState::ProcessCodeConversion(RequestFragmentsArgs *args, RequestFragmen
   for (; raft_index <= args->last_index; ++raft_index) {
     if (auto ptr = lm_->GetSingleLogEntry(raft_index); ptr) {
       reply->fragments.push_back(*ptr);
-      LOG(util::kRaft, "[CC] S%d Reply Fragments(I%d Org%d Res%d)", id_, ptr->Index(),
-          ptr->OriginalChunkVectorRef().size(), ptr->ReservedChunkVectorRef().size());
+      LOG(util::kRaft, "[CC] S%d Reply Fragments(I%d Org%dB Res%d)", id_, ptr->Index(),
+          ptr->FragmentSlice().size(), ptr->SubChunkVecRef().size());
     } else {
       break;
     }
@@ -640,8 +640,8 @@ void RaftState::ProcessCodeConversion(RequestFragmentsReply *reply) {
 
     // Debug:
     // --------------------------------------------------------------------
-    LOG(util::kRaft, "[CC] S%d Add CV(Org%d, Res%d) at I%d, FragId=%d", id_,
-        entry.GetOriginalChunkVector().size(), entry.GetReservedChunkVector().size(), entry.Index(),
+    LOG(util::kRaft, "[CC] S%d Add CV(Org%dB, Res%d) at I%d, FragId=%d", id_,
+        entry.FragmentSlice().size(), entry.GetSubChunkVec().size(), entry.Index(),
         reply->reply_id);
     // --------------------------------------------------------------------
     PreLeaderCodeConversionCtx().AddChunkVector(entry.Index(), entry,
@@ -827,11 +827,12 @@ void RaftState::CheckConflictEntryAndAppendNewCodeConversion(AppendEntriesArgs *
 
     // Since this entry passes the test for [raft_index, raft_term], it is supposed to contain the
     // original chunks, so we only need to overwrite the reserved chunks
-    assert(ent->GetOriginalChunkVector().size() > 0);
+    assert(ent->FragmentSlice().size() > 0);
     if (NeedOverwriteLogEntry(ent->GetChunkInfo(), args->entries[array_index].GetChunkInfo())) {
       // We only need to overwrite the reserved chunks for these entries:
       auto reserve_entry = args->entries[array_index];
-      reserve_entry.OriginalChunkVectorRef().clear();
+      // This entry has no fragslice since it only stores the SubChunkVector
+      reserve_entry.SetFragmentSlice(Slice(nullptr, 0));
       reserve_lm_->OverWriteLogEntry(reserve_entry, raft_index);
       if (!do_overwrite) {
         if (reserve_storage_) reserve_storage_->OverwriteEntry(raft_index, reserve_entry);
@@ -845,7 +846,7 @@ void RaftState::CheckConflictEntryAndAppendNewCodeConversion(AppendEntriesArgs *
     } else {
     }
     ent = lm_->GetSingleLogEntry(raft_index);
-    assert(ent->GetOriginalChunkVector().size() > 0);
+    assert(ent->FragmentSlice().size() > 0);
     reply->chunk_infos.push_back(
         ChunkInfo{ent->GetChunkInfo().GetK(), ent->GetChunkInfo().GetRaftIndex(), true});
     LOG(util::kRaft, "S%d REPLY (I%d T%d ChunkInfo(%s))", id_, raft_index, ent->Term(),
@@ -857,8 +858,8 @@ void RaftState::CheckConflictEntryAndAppendNewCodeConversion(AppendEntriesArgs *
     auto raft_index = args->prev_log_index + i + 1;
     LogEntry org_entry = args->entries[i], reserve_entry = args->entries[i];
 
-    org_entry.ReservedChunkVectorRef().clear();
-    reserve_entry.OriginalChunkVectorRef().clear();
+    org_entry.SubChunkVecRef().clear();
+    reserve_entry.SetFragmentSlice(Slice(nullptr, 0));
 
     lm_->AppendLogEntry(org_entry);
     reserve_lm_->AppendLogEntry(reserve_entry);
@@ -868,8 +869,8 @@ void RaftState::CheckConflictEntryAndAppendNewCodeConversion(AppendEntriesArgs *
 
     auto reply_chunk_info = args->entries[i].GetChunkInfo();
     reply_chunk_info.contain_original = true;
-    LOG(util::kRaft, "[CC] S%d APPEND I%d OrgChunks(%d) ReserveChunks(%d)", id_, raft_index,
-        org_entry.GetOriginalChunkVector().size(), reserve_entry.GetReservedChunkVector().size());
+    LOG(util::kRaft, "[CC] S%d APPEND I%d OrgChunk(%dB) ReserveChunks(%d)", id_, raft_index,
+        org_entry.FragmentSlice().size(), reserve_entry.SubChunkVecRef().size());
     reply->chunk_infos.push_back(reply_chunk_info);
   }
 
@@ -995,13 +996,12 @@ void RaftState::tryApplyLogEntriesCodeConversion() {
         assert(stat == kOk);
 
         // Combine both the original ChunkVector and reserved ChunkVector
-        ent.SetReservedChunkVector(reserved_ent.GetReservedChunkVector());
+        ent.SetSubChunkVec(reserved_ent.GetSubChunkVec());
       }
 
       rsm_->ApplyLogEntry(ent);
-      LOG(util::kRaft, "[CC] S%d Push ent(I%d T%d Org(%d) Reserve(%d)) to channel", id_,
-          ent.Index(), ent.Term(), ent.GetOriginalChunkVector().size(),
-          ent.GetReservedChunkVector().size());
+      LOG(util::kRaft, "[CC] S%d Push ent(I%d T%d Org(%dB) Reserve(%d)) to channel", id_,
+          ent.Index(), ent.Term(), ent.FragmentSlice().size(), ent.GetSubChunkVec().size());
     }
     last_applied_ += 1;
     LOG(util::kRaft, "[CC] S%d APPLY(%d->%d)", id_, old_apply_idx, last_applied_);
@@ -1354,10 +1354,14 @@ void RaftState::EncodeRaftEntryForCodeConversion(
       util::ToString(live_vec).c_str());
   auto slice = Slice(ent->CommandData().data() + ent->StartOffset(),
                      ent->CommandData().size() - ent->StartOffset());
-  ccm->EncodeForPlacement(slice, live_vec, static_encoder);
+  // ccm->EncodeForPlacement(slice, live_vec, static_encoder);
+  ccm->Encode(slice, live_vec, static_encoder);
 
   // For compatability, we still write the full LogEntry into the Stripe struct
   for (int i = 0; i < live_vec.size(); ++i) {
+    if (i == id_) {
+      continue;
+    }
     LogEntry encoded_ent;
     encoded_ent.SetIndex(raft_index);
     encoded_ent.SetTerm(stripe->raft_term);
@@ -1366,12 +1370,11 @@ void RaftState::EncodeRaftEntryForCodeConversion(
     encoded_ent.SetStartOffset(ent->StartOffset());
 
     encoded_ent.SetCommandLength(ent->CommandLength());
-    encoded_ent.SetNotEncodedSlice(Slice(ent->CommandData().data(), ent->StartOffset()));
-    encoded_ent.SetFragmentSlice(Slice(nullptr, 0));
 
-    // Set the ChunkVector and Stripe
-    encoded_ent.SetOriginalChunkVector(ccm->GetOriginalChunkVector(i));
-    encoded_ent.SetReservedChunkVector(ccm->GetReservedChunkVector(i));
+    // Set the associated data slice part
+    encoded_ent.SetNotEncodedSlice(Slice(ent->CommandData().data(), ent->StartOffset()));
+    encoded_ent.SetFragmentSlice(ccm->GetAssignedChunk(i));
+    encoded_ent.SetSubChunkVec(ccm->GetAssignedSubChunkVector(i));
 
     stripe->fragments[i] = encoded_ent;
   }
@@ -1411,8 +1414,8 @@ void RaftState::AdjustChunkDistributionCodeConversion(raft_index_t raft_index,
 
   for (int i = 0; i < live_vec.size(); ++i) {
     stripe->fragments[i].SetChunkInfo(ChunkInfo{code_conversion_k, raft_index, false});
-    stripe->fragments[i].SetOriginalChunkVector(ccm->GetOriginalChunkVector(i));
-    stripe->fragments[i].SetReservedChunkVector(ccm->GetReservedChunkVector(i));
+    stripe->fragments[i].SetFragmentSlice(ccm->GetAssignedChunk(i));
+    stripe->fragments[i].SetSubChunkVec(ccm->GetAssignedSubChunkVector(i));
   }
 }
 
@@ -1505,61 +1508,6 @@ void RaftState::ReplicateNewProposeEntryCodeConversion(raft_index_t raft_index) 
 
   MaybeAdjustDistributionAndReplicate(live_vec);
 
-  resetReplicationTimer();
-}
-
-void RaftState::ReplicateNewProposeEntry(raft_index_t raft_index) {
-  LOG(util::kRaft, "S%d REPLICATE NEW ENTRY", id_);
-  // The leader estimates the number of current alive servers and uses the
-  // parameters as encoding parameter
-  auto live_servers = live_monitor_.LiveNumber();
-
-  // k = N'- F, m = N - k where N is fixed
-  // Makes sure there are totally N chunks and each of these chunks is mapped to
-  // a certain follower
-  raft_encoding_param_t encode_k = live_servers - livenessLevel();
-  raft_encoding_param_t encode_m = GetClusterServerNumber() - encode_k;
-
-  LOG(util::kRaft, "S%d Estimates %d Alive Servers K:%d M:%d", id_, live_servers, encode_k,
-      encode_m);
-
-  // Encode the entry
-  auto stripe = new Stripe();
-#ifdef ENABLE_PERF_RECORDING
-  util::EncodingEntryPerfCounter perf_counter(encode_k, encode_m);
-#endif
-  EncodeRaftEntry(raft_index, encode_k, encode_m, stripe);
-  encoded_stripe_.insert_or_assign(raft_index, stripe);
-#ifdef ENABLE_PERF_RECORDING
-  perf_counter.Record();
-  PERF_LOG(&perf_counter);
-#endif
-  encoded_stripe_.insert_or_assign(raft_index, stripe);
-  UpdateLastEncodingK(raft_index, encode_k);
-  LOG(util::kRaft, "S%d Updates I%d Last Encoding K to %d", id_, raft_index, encode_k);
-
-  // Coding scheme may need change for previous log entries
-  if (live_servers != AliveServersOfLastPoint()) {
-    LOG(util::kRaft, "S%d Estimate Live server %d, LastPoint %d, do reencoding", id_, live_servers,
-        AliveServersOfLastPoint());
-    UpdateAliveServers(live_servers);
-    MaybeReEncodingAndReplicate();
-  } else {
-    LOG(util::kRaft, "S%d Estimate Live server %d, LastPoint %d, Do normal replication", id_,
-        live_servers, AliveServersOfLastPoint());
-    // Otherwise send these entries as original raft does
-    for (auto peer_id : peers_) {
-      if (peer_id != id_) {
-        if (live_monitor_.IsAlive(peer_id)) {
-          sendAppendEntries(peer_id);
-        } else {
-          sendHeartBeat(peer_id);
-        }
-      }
-    }
-  }
-
-  // Reset replication timer
   resetReplicationTimer();
 }
 
@@ -1854,13 +1802,13 @@ void RaftState::sendAppendEntriesCodeConversion(raft_node_id_t peer) {
     auto ccm = cc_managment_[raft_index];
     // Avoid resending original chunks if these chunks have been replicated for last round
     if (ccm->HasReceivedOrgChunk(peer)) {
-      args.entries.back().OriginalChunkVectorRef().clear();
+      // This entry should not carry the original chunk part
+      args.entries.back().SetFragmentSlice(Slice(nullptr, 0));
       LOG(util::kRaft, "[CC] S%d AE To S%d(REMOVE Org Chunk At I%d) at T%d", id_, peer, raft_index,
           CurrentTerm());
     }
-    LOG(util::kRaft, "[CC] S%d AE To S%d I%d (Org: %d Reserve: %d)", id_, peer, raft_index,
-        args.entries.back().OriginalChunkVectorRef().size(),
-        args.entries.back().ReservedChunkVectorRef().size());
+    LOG(util::kRaft, "[CC] S%d AE To S%d I%d (Org: %dB Reserve: %d)", id_, peer, raft_index,
+        args.entries.back().FragmentSlice().size(), args.entries.back().GetSubChunkVec().size());
   }
 
   LOG(util::kRaft, "S%d AE To S%d (I%d->I%d) at T%d", id_, peer, next_index,
@@ -1930,7 +1878,7 @@ void RaftState::DecodeCollectedStripeCodeConversion() {
     LogEntry recover_ent;
 
     Slice decode_results;
-    auto stat = ccm.DecodeCollectedChunkVec(input, &decode_results);
+    auto stat = ccm.Decode(input, &decode_results);
     if (!stat) {
       auto last_index = lm_->LastLogEntryIndex();
       lm_->DeleteLogEntriesFrom(r_idx);

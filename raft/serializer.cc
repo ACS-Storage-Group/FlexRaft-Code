@@ -4,10 +4,10 @@
 
 #include "RCF/ByteBuffer.hpp"
 #include "chunk.h"
-#include "subchunk.h"
 #include "log_entry.h"
 #include "raft_struct.h"
 #include "raft_type.h"
+#include "subchunk.h"
 
 namespace raft {
 Serializer Serializer::NewSerializer() { return Serializer(); }
@@ -15,24 +15,31 @@ Serializer Serializer::NewSerializer() { return Serializer(); }
 char *Serializer::serialize_logentry_helper(const LogEntry *entry, char *dst) {
   // NOTE: It is not ok to simply copy sizeof(LogEntry) here since the internal layout of
   // std::vector<Chunk> might be changed
-  std::memcpy(dst, entry, sizeof(LogEntry) - 2 * sizeof(CODE_CONVERSION_NAMESPACE::ChunkVector));
+  std::memcpy(dst, entry,
+              sizeof(LogEntry) - 2 * sizeof(CODE_CONVERSION_NAMESPACE::ChunkVector) -
+                  sizeof(CODE_CONVERSION_NAMESPACE::SubChunkVector));
   dst += sizeof(LogEntry);
   dst = PutPrefixLengthSlice(entry->NotEncodedSlice(), dst);
   dst = PutPrefixLengthSlice(entry->FragmentSlice(), dst);
-  dst = (entry->GetOriginalChunkVector()).Serialize(dst);
-  dst = (entry->GetReservedChunkVector()).Serialize(dst);
+  // dst = (entry->GetOriginalChunkVector()).Serialize(dst);
+  // dst = (entry->GetReservedChunkVector()).Serialize(dst);
   dst = (entry->GetSubChunkVec()).Serialize(dst);
   return dst;
 }
 
 const char *Serializer::deserialize_logentry_helper(const char *src, LogEntry *entry) {
-  std::memcpy(entry, src, sizeof(LogEntry) - 2 * sizeof(CODE_CONVERSION_NAMESPACE::ChunkVector));
+  // !!! Remember to minus sizeof(SubChunkVector) !!! 
+  // If you don't do this, the internal structure of the two ChunkVectors (Original and Reserved)
+  // would be messed up 
+  std::memcpy(entry, src,
+              sizeof(LogEntry) - 2 * sizeof(CODE_CONVERSION_NAMESPACE::ChunkVector) -
+                  sizeof(CODE_CONVERSION_NAMESPACE::SubChunkVector));
   src += sizeof(LogEntry);
   Slice not_encoded, frag;
   src = ParsePrefixLengthSlice(src, &not_encoded);
   src = ParsePrefixLengthSlice(src, &frag);
-  src = (entry->OriginalChunkVectorRef()).Deserialize(src);
-  src = (entry->ReservedChunkVectorRef()).Deserialize(src);
+  // src = (entry->OriginalChunkVectorRef()).Deserialize(src);
+  // src = (entry->ReservedChunkVectorRef()).Deserialize(src);
   src = (entry->SubChunkVecRef()).Deserialize(src);
 
   entry->SetNotEncodedSlice(not_encoded);
@@ -211,8 +218,8 @@ size_t Serializer::getSerializeSize(const LogEntry &entry) {
   ret += entry.FragmentSlice().size();
   ret += 2 * sizeof(size_t);
   // Add the size for ChunkVector
-  ret += entry.GetOriginalChunkVector().SizeForSerialization();
-  ret += entry.GetReservedChunkVector().SizeForSerialization();
+  // ret += entry.GetOriginalChunkVector().SizeForSerialization();
+  // ret += entry.GetReservedChunkVector().SizeForSerialization();
   ret += entry.GetSubChunkVec().SizeForSer();
   // Make size 4B aligment
   return (ret - 1) / 4 * 4 + 4;

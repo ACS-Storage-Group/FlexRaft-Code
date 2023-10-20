@@ -24,6 +24,7 @@
 #include "rpc.h"
 #include "rsm.h"
 #include "storage.h"
+#include "subchunk.h"
 #include "util.h"
 
 #define CONFLICT_TERM -2
@@ -288,7 +289,7 @@ class RaftNodeTest : public ::testing::Test {
     raft_encoding_param_t decode_k = node_num_ - node_num_ / 2;
     // Encoder::EncodingResults collected_res;
     // The input data
-    std::map<raft_node_id_t, CODE_CONVERSION_NAMESPACE::ChunkVector> collected_cv;
+    std::map<raft_node_id_t, CODE_CONVERSION_NAMESPACE::DecodeInput> collected_data;
     for (int i = 0; i < node_num_; ++i) {
       if (Alive(i)) {
         alive_number += 1;
@@ -303,7 +304,8 @@ class RaftNodeTest : public ::testing::Test {
           // To test, we only gather that are of fragments. Collecting the full entry data committed
           // by Raft leader is meaningless in our test.
           if (ent.Type() == kFragments) {
-            collected_cv.insert_or_assign(i, ent.GetConcatenatedChunkVector());
+            collected_data.insert_or_assign(
+                i, std::make_pair(ent.FragmentSlice(), ent.GetSubChunkVec()));
             LOG(util::kRaft, "[CC] Update DecodeK=%d", decode_k);
           }
         }
@@ -318,17 +320,18 @@ class RaftNodeTest : public ::testing::Test {
     Slice recover_res_slice;
 
     // No fragment collected: this entry is not committed yet
-    if (collected_cv.size() == 0) {
+    if (collected_data.size() == 0) {
       return false;
     }
 
     // Dump all contents of fragments
-    for (const auto &[id, cv] : collected_cv) {
-      LOG(util::kRaft, "[CC] Collect ChunkVector(size=%d) from S%d", cv.size(), id);
+    for (const auto &[id, d] : collected_data) {
+      LOG(util::kRaft, "[CC] Collect (Slice=%dB SubChunk Size=%d) from S%d", d.first.size(),
+          d.second.size());
     }
 
     // Failed ChunkVector recovering
-    auto recover_stat = ccm.DecodeCollectedChunkVec(collected_cv, &recover_res_slice);
+    auto recover_stat = ccm.Decode(collected_data, &recover_res_slice);
     if (!recover_stat) {
       LOG(util::kRaft, "[CC] [FAILED] Recover Collected ChunkVector");
       return false;

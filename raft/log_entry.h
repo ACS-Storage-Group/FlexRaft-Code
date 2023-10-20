@@ -55,25 +55,25 @@ class LogEntry {
   auto FragmentSlice() const -> Slice { return Type() == kNormal ? Slice() : fragment_slice_; }
   void SetFragmentSlice(const Slice &slice) { fragment_slice_ = slice; }
 
-  void SetOriginalChunkVector(const CODE_CONVERSION_NAMESPACE::ChunkVector &cv) { org_cv_ = cv; }
-  auto GetOriginalChunkVector() const -> const CODE_CONVERSION_NAMESPACE::ChunkVector & {
-    return org_cv_;
-  }
-  auto &OriginalChunkVectorRef() { return org_cv_; }
+  // void SetOriginalChunkVector(const CODE_CONVERSION_NAMESPACE::ChunkVector &cv) { org_cv_ = cv; }
+  // auto GetOriginalChunkVector() const -> const CODE_CONVERSION_NAMESPACE::ChunkVector & {
+  //   return org_cv_;
+  // }
+  // auto &OriginalChunkVectorRef() { return org_cv_; }
 
-  void SetReservedChunkVector(const CODE_CONVERSION_NAMESPACE::ChunkVector &cv) {
-    reserved_cv_ = cv;
-  }
-  auto GetReservedChunkVector() const -> const CODE_CONVERSION_NAMESPACE::ChunkVector& {
-    return reserved_cv_;
-  }
-  auto &ReservedChunkVectorRef() { return reserved_cv_; }
+  // void SetReservedChunkVector(const CODE_CONVERSION_NAMESPACE::ChunkVector &cv) {
+  //   reserved_cv_ = cv;
+  // }
+  // auto GetReservedChunkVector() const -> const CODE_CONVERSION_NAMESPACE::ChunkVector& {
+  //   return reserved_cv_;
+  // }
+  // auto &ReservedChunkVectorRef() { return reserved_cv_; }
 
-  auto GetConcatenatedChunkVector() const {
-    auto ret = GetOriginalChunkVector();
-    ret.Concatenate(reserved_cv_);
-    return ret;
-  }
+  // auto GetConcatenatedChunkVector() const {
+  //   auto ret = GetOriginalChunkVector();
+  //   ret.Concatenate(reserved_cv_);
+  //   return ret;
+  // }
 
   void SetSubChunkVec(const CODE_CONVERSION_NAMESPACE::SubChunkVector& subchunk_vec) {
     subchunks_ = subchunk_vec;

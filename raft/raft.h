@@ -157,7 +157,7 @@ struct PreLeaderStripeStoreCodeConversion {
 
   raft_index_t start_index, end_index;
   // Recovery entities for each entry to be recovered
-  std::vector<std::map<raft_node_id_t, CODE_CONVERSION_NAMESPACE::ChunkVector>> cc_ents_;
+  std::vector<std::map<raft_node_id_t, CODE_CONVERSION_NAMESPACE::DecodeInput>> cc_ents_;
   bool response_[15];
   int node_num;
   raft_node_id_t me;
@@ -208,9 +208,8 @@ struct PreLeaderStripeStoreCodeConversion {
       return;
     }
     auto array_index = idx - start_index;
-    auto cv = entry.GetOriginalChunkVector();
-    cv.Concatenate(entry.GetReservedChunkVector());
-    cc_ents_[array_index].insert_or_assign(chunk_id, cv);
+    cc_ents_[array_index].insert_or_assign(
+        chunk_id, std::make_pair(entry.FragmentSlice(), entry.GetSubChunkVec()));
   }
 };
 
@@ -350,7 +349,7 @@ class RaftState {
   void SetVoteCnt(int cnt) { vote_me_cnt_ = cnt; }
 
   // To test preleader performance, set the CommitIndex to be 1 all the time
-  raft_index_t CommitIndex() const { return 0; }
+  raft_index_t CommitIndex() const { return commit_index_; }
   void SetCommitIndex(raft_index_t raft_index) { commit_index_ = raft_index; }
 
   raft_index_t LastLogIndex() const { return lm_->LastLogEntryIndex(); }
@@ -485,7 +484,7 @@ class RaftState {
   // Replicate a new proposed entry indexed by specified raft_index to alive
   // servers
   // [Require]: Given entry has already been added into log
-  void ReplicateNewProposeEntry(raft_index_t raft_index);
+  // void ReplicateNewProposeEntry(raft_index_t raft_index);
 
   // Replicate a new proposed entry in the code conversion manner
   void ReplicateNewProposeEntryCodeConversion(raft_index_t raft_index);
@@ -593,7 +592,7 @@ class RaftState {
 
   PreLeaderStripeStoreCodeConversion preleader_stripe_store_cc_;
 
-  auto& PreLeaderCodeConversionCtx() { return preleader_stripe_store_cc_; }
+  auto &PreLeaderCodeConversionCtx() { return preleader_stripe_store_cc_; }
 
  public:
   std::set<raft_node_id_t> peers_;

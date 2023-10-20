@@ -102,7 +102,7 @@ struct SubChunk {
     s = subchunk_info_.Deserialize(s);
     size_t sz = *(int*)s;
     s += sizeof(int);
-    data_ = Slice(const_cast<char*>(s), sz);
+    data_ = Slice::Copy(Slice(const_cast<char*>(s), sz));
     return s + sz;
   }
 

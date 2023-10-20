@@ -90,22 +90,7 @@ auto operator==(const LogEntry &lhs, const LogEntry &rhs) -> bool {
     return false;
   }
 
-  // Compare the two ChunkVector
-  return lhs.GetOriginalChunkVector() == rhs.GetOriginalChunkVector() &&
-         lhs.GetReservedChunkVector() == rhs.GetReservedChunkVector() &&
-         lhs.GetSubChunkVec() == rhs.GetSubChunkVec();
-
-  // // Check if sizes equal to each other
-  // auto cv_equal = lhs.GetOriginalChunkVector().size() == rhs.GetOriginalChunkVector().size();
-  // if (!cv_equal) {
-  //   return false;
-  // }
-  // // Check if each element equal to each other
-  // for (int i = 0; i < lhs.GetOriginalChunkVector().size(); ++i) {
-  //   if (lhs.GetOriginalChunkVector().chunk_at(i) != rhs.GetOriginalChunkVector().chunk_at(i)) {
-  //     return false;
-  //   }
-  // }
-  // return true;
+  // Compare the SubChunkVector
+  return lhs.GetSubChunkVec() == rhs.GetSubChunkVec();
 }
 }  // namespace raft
