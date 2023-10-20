@@ -14,6 +14,7 @@
 #include "RCF/ThreadLibrary.hpp"
 #include "RCF/UdpEndpoint.hpp"
 #include "chunk.h"
+#include "subchunk.h"
 #include "gtest/gtest.h"
 #include "log_entry.h"
 #include "raft_struct.h"
@@ -136,6 +137,11 @@ class SerializerTest : public ::testing::Test {
                                                 GenerateRandomSlice(1024, 1024 + 1));
           ent.ReservedChunkVectorRef().AddChunk(ChunkIndex(0, 0), ChunkIndex(1, 1),
                                                 GenerateRandomSlice(1024, 1025));
+          // Add 10 SubChunks:
+          for (int i = 0; i < 10; ++i) {
+            ent.SubChunkVecRef().AddSubChunk(CODE_CONVERSION_NAMESPACE::SubChunkInfo(0, 0),
+                                             GenerateRandomSlice(1024, 1025));
+          }
           break;
         }
         case raft::kTypeMax:

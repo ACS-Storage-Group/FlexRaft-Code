@@ -92,7 +92,8 @@ auto operator==(const LogEntry &lhs, const LogEntry &rhs) -> bool {
 
   // Compare the two ChunkVector
   return lhs.GetOriginalChunkVector() == rhs.GetOriginalChunkVector() &&
-         lhs.GetReservedChunkVector() == rhs.GetReservedChunkVector();
+         lhs.GetReservedChunkVector() == rhs.GetReservedChunkVector() &&
+         lhs.GetSubChunkVec() == rhs.GetSubChunkVec();
 
   // // Check if sizes equal to each other
   // auto cv_equal = lhs.GetOriginalChunkVector().size() == rhs.GetOriginalChunkVector().size();

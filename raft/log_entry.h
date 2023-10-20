@@ -8,6 +8,7 @@
 
 #include "SF/Archive.hpp"
 #include "chunk.h"
+#include "subchunk.h"
 #include "raft_type.h"
 
 namespace raft {
@@ -74,6 +75,16 @@ class LogEntry {
     return ret;
   }
 
+  void SetSubChunkVec(const CODE_CONVERSION_NAMESPACE::SubChunkVector& subchunk_vec) {
+    subchunks_ = subchunk_vec;
+  }
+
+  auto GetSubChunkVec() const -> const CODE_CONVERSION_NAMESPACE::SubChunkVector& {
+    return subchunks_;
+  }
+
+  auto& SubChunkVecRef() { return subchunks_; }
+
   // Serialization function required by RCF
   // void serialize(SF::Archive &ar);
   //
@@ -112,6 +123,7 @@ class LogEntry {
   // Reserved ChunkVector
   CODE_CONVERSION_NAMESPACE::ChunkVector org_cv_;
   CODE_CONVERSION_NAMESPACE::ChunkVector reserved_cv_;
+  CODE_CONVERSION_NAMESPACE::SubChunkVector subchunks_;
 };
 
 auto operator==(const LogEntry &lhs, const LogEntry &rhs) -> bool;

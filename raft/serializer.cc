@@ -4,6 +4,7 @@
 
 #include "RCF/ByteBuffer.hpp"
 #include "chunk.h"
+#include "subchunk.h"
 #include "log_entry.h"
 #include "raft_struct.h"
 #include "raft_type.h"
@@ -20,6 +21,7 @@ char *Serializer::serialize_logentry_helper(const LogEntry *entry, char *dst) {
   dst = PutPrefixLengthSlice(entry->FragmentSlice(), dst);
   dst = (entry->GetOriginalChunkVector()).Serialize(dst);
   dst = (entry->GetReservedChunkVector()).Serialize(dst);
+  dst = (entry->GetSubChunkVec()).Serialize(dst);
   return dst;
 }
 
@@ -31,6 +33,7 @@ const char *Serializer::deserialize_logentry_helper(const char *src, LogEntry *e
   src = ParsePrefixLengthSlice(src, &frag);
   src = (entry->OriginalChunkVectorRef()).Deserialize(src);
   src = (entry->ReservedChunkVectorRef()).Deserialize(src);
+  src = (entry->SubChunkVecRef()).Deserialize(src);
 
   entry->SetNotEncodedSlice(not_encoded);
   entry->SetFragmentSlice(frag);
@@ -210,6 +213,7 @@ size_t Serializer::getSerializeSize(const LogEntry &entry) {
   // Add the size for ChunkVector
   ret += entry.GetOriginalChunkVector().SizeForSerialization();
   ret += entry.GetReservedChunkVector().SizeForSerialization();
+  ret += entry.GetSubChunkVec().SizeForSer();
   // Make size 4B aligment
   return (ret - 1) / 4 * 4 + 4;
 }

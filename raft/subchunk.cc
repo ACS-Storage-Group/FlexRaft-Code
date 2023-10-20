@@ -2,13 +2,6 @@
 
 namespace raft {
 namespace CODE_CONVERSION_NAMESPACE {
-size_t SubChunkVector::SizeForSer() const {
-  size_t alloc_sz = sizeof(int);
-  for (const auto& c : subchunks_) {
-    alloc_sz += c.SizeForSer();
-  }
-  return alloc_sz;
-}
 
 char* SubChunkVector::Serialize(char* d) const {
   // Serialize the data

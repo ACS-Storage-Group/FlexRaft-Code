@@ -14,6 +14,9 @@
 #include "util.h"
 
 namespace raft {
+
+#define CODE_CONVERSION_NAMESPACE code_conversion
+
 namespace CODE_CONVERSION_NAMESPACE {
 struct SubChunkInfo {
   static constexpr int16_t kInvalidId = (int16_t)-1;
@@ -129,7 +132,13 @@ struct SubChunkVector {
   bool Deserialize(const Slice& s);
   const char* Deserialize(const char* s);
 
-  size_t SizeForSer() const;
+  size_t SizeForSer() const {
+    size_t alloc_sz = sizeof(int);
+    for (const auto& c : subchunks_) {
+      alloc_sz += c.SizeForSer();
+    }
+    return alloc_sz;
+  }
 
   SubChunkVector SubVec(int l, int r) const {
     SubChunkVector ret;
