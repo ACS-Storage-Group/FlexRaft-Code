@@ -246,6 +246,18 @@ void CodeConversionManagement::PrepareOriginalChunks(const Slice& slice,
   }
 }
 
+void CodeConversionManagement::EncodeOriginalSlice(const Slice& slice,
+                                                   StaticEncoder* static_encoder) {
+  std::vector<Slice> input_slices = slice.Shard(k_);
+  encoded_chunks_.clear();
+  if (static_encoder && static_encoder->GetEncodeK() == k_ && static_encoder->GetEncodeM() == F_) {
+    static_encoder->EncodeSlice(input_slices, encoded_chunks_);
+  } else {
+    Encoder encoder;
+    encoder.EncodeSlice(input_slices, k_, F_, encoded_chunks_);
+  }
+}
+
 void CodeConversionManagement::AssignOriginalChunksToNode(const ChunkDistribution& cd) {
   for (int i = 0; i < k_ + F_; ++i) {
     for (const auto& cidx : cd.GetAssignedOrgChunks(i)) {
@@ -302,6 +314,139 @@ void CodeConversionManagement::EncodeForPlacement(const Slice& slice,
 
   AssignOriginalChunksToNode(cd);
   EncodeReservedChunksAndAssignToNode(cd);
+  SetLiveVecForCurrDistribution(live_vec);
+}
+
+void CodeConversionManagement::Encode(const Slice& slice, const std::vector<bool>& live_vec,
+                                      StaticEncoder* static_encoder) {
+  EncodeOriginalSlice(slice, static_encoder);
+  std::vector<raft_node_id_t> failed_servers, live_servers, preserve_servers;
+
+  for (int i = 0; i < live_vec.size(); ++i) {
+    if (!live_vec[i])
+      failed_servers.emplace_back(i);
+    else
+      live_servers.emplace_back(i);
+  }
+  int preserve_server_cnt = failed_servers.size() == 0 ? 0 : live_servers.size() - F_;
+  preserve_servers = std::vector(live_servers.begin(), live_servers.begin() + preserve_server_cnt);
+
+  // Assign the original chunks
+  for (const auto& id : live_servers) {
+    original_chunks_[id] = encoded_chunks_[id];
+  }
+
+  // For each missed chunk
+  for (const auto& missed_chunk_id : failed_servers) {
+    Slice missed_chunk = encoded_chunks_[missed_chunk_id];
+    Encoder encoder;
+    std::vector<Slice> encode_output;
+    auto stat = encoder.EncodeSlice(missed_chunk.Shard(preserve_server_cnt), preserve_server_cnt,
+                                    F_, encode_output);
+    assert(stat);
+
+    // Assign the SubChunks to each server
+    for (int i = 0; i < encode_output.size(); ++i) {
+      auto server_id = live_servers[i];
+      subchunks_[server_id].AddSubChunk(SubChunkInfo{(int16_t)missed_chunk_id, (int16_t)i},
+                                        encode_output[i]);
+    }
+  }
+  SetLiveVecForCurrDistribution(live_vec);
+}
+
+bool CodeConversionManagement::Decode(const std::map<raft_node_id_t, DecodeInput>& input,
+                                      Slice* slice) {
+  // Check if there is any SubChunk used to recover the missed chunks
+  int missed_chunk_cnt = 0;
+  Encoder::EncodingResults decode_input;
+
+  // Selectively add data into the input vector: only add valid slice
+  for (const auto& [id, data] : input) {
+    missed_chunk_cnt = std::max((int)data.second.size(), missed_chunk_cnt);
+    if (data.first.valid()) {
+      decode_input.insert_or_assign(id, data.first);
+    }
+  }
+
+  // Decode the missed chunks only when there is no enough slice
+  if (decode_input.size() < k_ && missed_chunk_cnt != 0) {
+    Encoder::EncodingResults missed_chunk_decode_input;
+    int missed_chunk_id = -1;
+    for (int i = 0; i < missed_chunk_cnt; ++i) {
+      missed_chunk_decode_input.clear();
+      missed_chunk_id = -1;
+
+      // Collect SubChunks to decode missed chunks
+      for (const auto& [id, data] : input) {
+        if (data.second.size() == 0) {
+          continue;
+        }
+        auto subchunk = data.second.at(i);
+        if (missed_chunk_id == -1) {
+          missed_chunk_id = subchunk.GetSubChunkInfo().ChunkId();
+        } else {
+          assert(missed_chunk_id == subchunk.GetSubChunkInfo().ChunkId());
+        }
+        missed_chunk_decode_input.insert_or_assign(subchunk.GetSubChunkInfo().SubChunkId(),
+                                                   subchunk.slice());
+      }
+
+      int decode_k = F_ + 1 - missed_chunk_cnt;
+      Encoder encoder;
+      Slice missed_chunk_slice;
+      auto stat = encoder.DecodeSlice(missed_chunk_decode_input, decode_k, F_, &missed_chunk_slice);
+      if (!stat) {
+        return false;
+      }
+      decode_input.insert_or_assign(missed_chunk_id, missed_chunk_slice);
+    }
+  }
+
+  // Decode the original data;
+  Encoder final_decoder;
+  return final_decoder.DecodeSlice(decode_input, k_, F_, slice);
+}
+
+void CodeConversionManagement::AdjustNewLivenessVector(const std::vector<bool>& live_vec) {
+  if (live_vec == GetLiveVecForCurrDistribution()) {
+    // No need to adjust the chunk distribution if the liveness case has not changed
+    return;
+  }
+
+  // Before adjusting, the original slice must have been encoded once
+  assert(encoded_chunks_.size() == k_ + F_);
+  std::vector<raft_node_id_t> failed_servers, live_servers, preserve_servers;
+
+  for (int i = 0; i < live_vec.size(); ++i) {
+    if (!live_vec[i])
+      failed_servers.emplace_back(i);
+    else
+      live_servers.emplace_back(i);
+  }
+  int preserve_server_cnt = failed_servers.size() == 0 ? 0 : live_servers.size() - F_;
+  preserve_servers = std::vector(live_servers.begin(), live_servers.begin() + preserve_server_cnt);
+
+  // Assign the original chunks
+  for (const auto& id : live_servers) {
+    original_chunks_[id] = encoded_chunks_[id];
+  }
+
+  for (const auto& missed_chunk_id : failed_servers) {
+    Slice missed_chunk = encoded_chunks_[missed_chunk_id];
+    Encoder encoder;
+    std::vector<Slice> encode_output;
+    auto stat = encoder.EncodeSlice(missed_chunk.Shard(preserve_server_cnt), preserve_server_cnt,
+                                    F_, encode_output);
+    assert(stat);
+
+    // Assign the SubChunks to each server
+    for (int i = 0; i < encode_output.size(); ++i) {
+      auto server_id = live_servers[i];
+      subchunks_[server_id].AddSubChunk(SubChunkInfo{(int16_t)missed_chunk_id, (int16_t)i},
+                                        encode_output[i]);
+    }
+  }
   SetLiveVecForCurrDistribution(live_vec);
 }
 
@@ -416,7 +561,7 @@ bool CodeConversionManagement::DecodeCollectedChunkVec(
   //       const auto& [id, v] = elem;
   //       final_decode_input.emplace(id, Slice::Combine(v.SubVec(0, r_).as_slice_vec()));
   //     });
-  
+
   for (const auto& [id, cv] : input) {
     if (cv.size() == 0) {
       continue;

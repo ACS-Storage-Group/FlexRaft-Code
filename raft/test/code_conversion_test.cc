@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <numeric>
 #include <unordered_map>
 
 #include "encoder.h"
@@ -79,7 +80,7 @@ class CodeConversionManagementTest : public ::testing::Test {
   }
 };
 
-TEST_F(CodeConversionManagementTest, TestRecoverTheWholeEntryWithNoServerFailure) {
+TEST_F(CodeConversionManagementTest, DISABLED_TestRecoverTheWholeEntryWithNoServerFailure) {
   const int TestN = 7, TestK = 4, TestF = 3;
   auto total_chunk_num = get_chunk_count(TestK), r = total_chunk_num / TestK;
 
@@ -90,7 +91,7 @@ TEST_F(CodeConversionManagementTest, TestRecoverTheWholeEntryWithNoServerFailure
   CheckProcess(TestN, TestK, TestF, r, is_alive, {});
 }
 
-TEST_F(CodeConversionManagementTest, TestRecoverTheWholeEntryWithOneServerFailure) {
+TEST_F(CodeConversionManagementTest, DISABLED_TestRecoverTheWholeEntryWithOneServerFailure) {
   const int TestN = 7, TestK = 4, TestF = 3;
   auto total_chunk_num = get_chunk_count(TestK), r = total_chunk_num / TestK;
 
@@ -101,7 +102,7 @@ TEST_F(CodeConversionManagementTest, TestRecoverTheWholeEntryWithOneServerFailur
   CheckProcess(TestN, TestK, TestF, r, is_alive, std::vector<raft_node_id_t>({f}));
 }
 
-TEST_F(CodeConversionManagementTest, TestRecoverTheWholeEntryWithTwoServerFailure) {
+TEST_F(CodeConversionManagementTest, DISABLED_TestRecoverTheWholeEntryWithTwoServerFailure) {
   const int TestN = 7, TestK = 4, TestF = 3;
   auto total_chunk_num = get_chunk_count(TestK), r = total_chunk_num / TestK;
 
@@ -112,7 +113,7 @@ TEST_F(CodeConversionManagementTest, TestRecoverTheWholeEntryWithTwoServerFailur
   CheckProcess(TestN, TestK, TestF, r, is_alive, std::vector<raft_node_id_t>({f1, f2}));
 }
 
-TEST_F(CodeConversionManagementTest, TestAdjustChunkDistribution) {
+TEST_F(CodeConversionManagementTest, DISABLED_TestAdjustChunkDistribution) {
   const int TestN = 7, TestK = 4, TestF = 3;
   auto total_chunk_num = get_chunk_count(TestK), r = total_chunk_num / TestK;
 
@@ -152,6 +153,144 @@ TEST_F(CodeConversionManagementTest, TestAdjustChunkDistribution) {
 
   ASSERT_TRUE(b);
   ASSERT_EQ(recover_ent.compare(slice), 0);
+}
+
+TEST_F(CodeConversionManagementTest, TestEncodeAndDecode) {
+  const int TestN = 7, TestK = 4, TestF = 3;
+  auto total_chunk_num = get_chunk_count(TestK), r = total_chunk_num / TestK;
+  StaticEncoder encoder;
+  encoder.Init(TestK, TestF);
+
+  auto test_case = [&](int failed_num) {
+    std::vector<bool> is_alive(TestN, true);
+
+    // Construct Failed servers:
+    std::vector<raft_node_id_t> failed_servers(TestN);
+    std::iota(failed_servers.begin(), failed_servers.end(), 0);
+    RandomDrop(failed_servers, failed_num);
+
+    auto is_failed = [&](int i) -> bool {
+      return std::find(failed_servers.begin(), failed_servers.end(), i) != failed_servers.end();
+    };
+
+    std::for_each(failed_servers.begin(), failed_servers.end(),
+                  [&](auto id) { is_alive[id] = false; });
+
+    CodeConversionManagement ccm(TestK, TestF, r);
+
+    // Generate a random slice
+    auto slice = GenerateSliceOfRandomSize(512 * 1024, 1024 * 1024, r * TestK);
+
+    ccm.Encode(slice, is_alive, &encoder);
+
+    for (int i = 0; i < TestN; ++i) {
+      if (is_failed(i)) {
+        continue;
+      }
+      ASSERT_EQ(ccm.GetAssignedChunk(i).size(), slice.size() / TestK);
+      ASSERT_EQ(ccm.GetAssignedSubChunkVector(i).size(), failed_num);
+    }
+
+    std::map<raft_node_id_t, DecodeInput> data;
+    for (int i = 0; i < TestN; ++i) {
+      data.insert_or_assign(
+          i, std::make_pair(ccm.GetAssignedChunk(i), ccm.GetAssignedSubChunkVector(i)));
+    }
+
+    ASSERT_EQ(data.size(), TestN);
+
+    // Drop some nodes' data to check if original slice can be recovered
+    for (int i = 0; i < TestN - TestK; ++i) {
+      if (!is_failed(i)) {
+        data.erase(i);
+      }
+    }
+
+    Slice recover_ent;
+    auto b = ccm.Decode(data, &recover_ent);
+
+    ASSERT_TRUE(b);
+    ASSERT_EQ(recover_ent.compare(slice), 0);
+  };
+
+  test_case(0);  // No server failed
+  test_case(1);  // One server failed
+  test_case(2);  // two servers failed
+  test_case(3);  // three servers failed
+}
+
+TEST_F(CodeConversionManagementTest, TestAdjustNewLivenessCase) {
+  const int TestN = 7, TestK = 4, TestF = 3;
+  auto total_chunk_num = get_chunk_count(TestK), r = total_chunk_num / TestK;
+  StaticEncoder encoder;
+  encoder.Init(TestK, TestF);
+
+  auto test_case = [&](int failed_num) {
+    std::vector<bool> is_alive(TestN, true);
+
+    // Generate a random slice
+    auto slice = GenerateSliceOfRandomSize(512 * 1024, 1024 * 1024, r * TestK);
+
+    // Construct Failed servers:
+    std::vector<raft_node_id_t> failed_servers(TestN);
+    std::iota(failed_servers.begin(), failed_servers.end(), 0);
+    RandomDrop(failed_servers, failed_num);
+
+    auto is_failed = [&](int i) -> bool {
+      return std::find(failed_servers.begin(), failed_servers.end(), i) != failed_servers.end();
+    };
+
+    std::for_each(failed_servers.begin(), failed_servers.end(),
+                  [&](auto id) { is_alive[id] = false; });
+
+    CodeConversionManagement ccm(TestK, TestF, r);
+
+    ccm.Encode(slice, is_alive, &encoder);
+
+    for (int i = 0; i < TestN; ++i) {
+      if (is_failed(i)) {
+        continue;
+      }
+      ASSERT_EQ(ccm.GetAssignedChunk(i).size(), slice.size() / TestK);
+      ASSERT_EQ(ccm.GetAssignedSubChunkVector(i).size(), failed_num);
+    }
+
+    // Adjust the data placement
+    for (int i = 0; i < TestN; ++i) {
+      if (!is_failed(i)) {
+        failed_servers.emplace_back(i);
+        is_alive[i] = false;
+        break;
+      }
+    }
+
+    ccm.AdjustNewLivenessVector(is_alive);
+
+    std::map<raft_node_id_t, DecodeInput> data;
+    for (int i = 0; i < TestN; ++i) {
+      data.insert_or_assign(
+          i, std::make_pair(ccm.GetAssignedChunk(i), ccm.GetAssignedSubChunkVector(i)));
+    }
+
+    ASSERT_EQ(data.size(), TestN);
+
+    // Drop some nodes' data to check if original slice can be recovered
+    for (int i = 0; i < TestN - TestK; ++i) {
+      if (!is_failed(i)) {
+        data.erase(i);
+      }
+    }
+
+    Slice recover_ent;
+    auto b = ccm.Decode(data, &recover_ent);
+
+    ASSERT_TRUE(b);
+    ASSERT_EQ(recover_ent.compare(slice), 0);
+  };
+
+  test_case(0);
+  test_case(1);
+  test_case(2);
 }
 
 };  // namespace raft

@@ -32,6 +32,7 @@ set(RAFT_SRC
   serializer.cc
   encoder.cc
   chunk.cc
+  subchunk.cc
   code_conversion.cc
   util.cc
   log_manager.cc

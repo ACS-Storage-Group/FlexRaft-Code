@@ -11,11 +11,14 @@
 #include "chunk.h"
 #include "encoder.h"
 #include "raft_type.h"
+#include "subchunk.h"
 #include "util.h"
 
 namespace raft {
 
 namespace CODE_CONVERSION_NAMESPACE {
+
+using DecodeInput = std::pair<Slice, SubChunkVector>;
 
 // A managing class for a raft entry, it conatins functionalities for data management, such as
 // encoding/decoding, generating chunk distribtion according to the liveness status of the
@@ -32,7 +35,17 @@ class CodeConversionManagement {
 
   // Given the liveness vector that indicates the current liveness status of this cluster,
   // Calculate the corresponding encoding data placement for it.
-  void EncodeForPlacement(const Slice& slice, const std::vector<bool>& live_vec, StaticEncoder* static_encoder);
+  void EncodeForPlacement(const Slice& slice, const std::vector<bool>& live_vec,
+                          StaticEncoder* static_encoder);
+
+  // Encode based on current liveness vector 
+  void Encode(const Slice& slice, const std::vector<bool>& live_vec, StaticEncoder* static_encoder);
+
+  // Decode to recover the original data
+  bool Decode(const std::map<raft_node_id_t, DecodeInput>& input, Slice* slice);
+
+  // Adjust to the new liveness vector
+  void AdjustNewLivenessVector(const std::vector<bool>& live_vec);
 
   bool DecodeCollectedChunkVec(const std::map<raft_node_id_t, ChunkVector>& input, Slice* slice);
 
@@ -64,6 +77,20 @@ class CodeConversionManagement {
     return org_chunk_response_[node_id] == true;
   }
 
+  Slice GetAssignedChunk(raft_node_id_t node_id) {
+    if (original_chunks_.count(node_id) == 0) {
+      return Slice();
+    }
+    return original_chunks_[node_id];
+  }
+
+  SubChunkVector GetAssignedSubChunkVector(raft_node_id_t node_id) {
+    if (subchunks_.count(node_id) == 0) {
+      return SubChunkVector();
+    }
+    return subchunks_[node_id];
+  }
+
  private:
   // Adjust the chunk placement according to the new ChunkDistribution.
   // Note that this function would clear all slice that are allocated in last round.
@@ -71,6 +98,9 @@ class CodeConversionManagement {
 
   // Prepare the original chunks and write them into the org_chunks_ attribute
   void PrepareOriginalChunks(const Slice& slice, StaticEncoder* static_encoder);
+
+  // Encode the slice using (k, F) parameter and record the results
+  void EncodeOriginalSlice(const Slice& slice, StaticEncoder* static_encoder);
 
   // Assign the slices corresponds to the original chunks to each node
   void AssignOriginalChunksToNode(const ChunkDistribution& cd);
@@ -96,6 +126,7 @@ class CodeConversionManagement {
     node_2_reserved_chunks_[node_id].AddChunk(idx1, idx2, slice);
   }
 
+
  private:
   int k_, F_, r_;
   std::map<raft_node_id_t, ChunkVector> node_2_org_chunks_;
@@ -106,6 +137,13 @@ class CodeConversionManagement {
 
   // The liveness vector when generating chunk distribution or adjusting
   std::vector<bool> live_vec_;
+
+  // The original chunks assigned to each node
+  std::map<raft_node_id_t, Slice> original_chunks_;
+  // Subchunks preserved for failed servers
+  std::map<raft_node_id_t, SubChunkVector> subchunks_;
+  // The encoded chunks for the first encoding process
+  std::vector<Slice> encoded_chunks_;
 };
 };  // namespace CODE_CONVERSION_NAMESPACE
 
