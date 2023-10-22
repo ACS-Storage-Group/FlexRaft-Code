@@ -303,19 +303,19 @@ void CodeConversionManagement::EncodeReservedChunksAndAssignToNode(const ChunkDi
   }
 }
 
-void CodeConversionManagement::EncodeForPlacement(const Slice& slice,
-                                                  const std::vector<bool>& live_vec,
-                                                  StaticEncoder* static_encoder) {
-  // util::LatencyGuard guard([](uint64_t us) { printf("Encode cost: %lu us\n", us); });
-  PrepareOriginalChunks(slice, static_encoder);
+// void CodeConversionManagement::EncodeForPlacement(const Slice& slice,
+//                                                   const std::vector<bool>& live_vec,
+//                                                   StaticEncoder* static_encoder) {
+//   // util::LatencyGuard guard([](uint64_t us) { printf("Encode cost: %lu us\n", us); });
+//   PrepareOriginalChunks(slice, static_encoder);
 
-  ChunkDistribution cd(k_, F_, r_);
-  cd.GenerateChunkDistribution(live_vec);
+//   ChunkDistribution cd(k_, F_, r_);
+//   cd.GenerateChunkDistribution(live_vec);
 
-  AssignOriginalChunksToNode(cd);
-  EncodeReservedChunksAndAssignToNode(cd);
-  SetLiveVecForCurrDistribution(live_vec);
-}
+//   AssignOriginalChunksToNode(cd);
+//   EncodeReservedChunksAndAssignToNode(cd);
+//   SetLiveVecForCurrDistribution(live_vec);
+// }
 
 void CodeConversionManagement::Encode(const Slice& slice, const std::vector<bool>& live_vec,
                                       StaticEncoder* static_encoder) {
@@ -450,17 +450,17 @@ void CodeConversionManagement::AdjustNewLivenessVector(const std::vector<bool>& 
   SetLiveVecForCurrDistribution(live_vec);
 }
 
-void CodeConversionManagement::AdjustChunkDistribution(const std::vector<bool>& live_vec) {
-  // util::LatencyGuard guard([](uint64_t us) { printf("Adjust cost: %lu us\n", us); });
-  if (live_vec == GetLiveVecForCurrDistribution()) {
-    // No need to adjust the chunk distribution if the liveness vector has not changed
-    return;
-  }
-  ChunkDistribution cd(k_, F_, r_);
-  cd.GenerateChunkDistribution(live_vec);
-  AdjustChunkDistribution(cd);
-  SetLiveVecForCurrDistribution(live_vec);
-}
+// void CodeConversionManagement::AdjustChunkDistribution(const std::vector<bool>& live_vec) {
+//   // util::LatencyGuard guard([](uint64_t us) { printf("Adjust cost: %lu us\n", us); });
+//   if (live_vec == GetLiveVecForCurrDistribution()) {
+//     // No need to adjust the chunk distribution if the liveness vector has not changed
+//     return;
+//   }
+//   ChunkDistribution cd(k_, F_, r_);
+//   cd.GenerateChunkDistribution(live_vec);
+//   AdjustChunkDistribution(cd);
+//   SetLiveVecForCurrDistribution(live_vec);
+// }
 
 std::map<raft_node_id_t, Slice> CodeConversionManagement::RecoverReservedChunks(
     const std::map<raft_node_id_t, ChunkVector>& input) {
@@ -547,34 +547,34 @@ std::map<raft_node_id_t, Slice> CodeConversionManagement::RecoverReservedChunks(
   return reserved_fragments;
 }
 
-bool CodeConversionManagement::DecodeCollectedChunkVec(
-    const std::map<raft_node_id_t, ChunkVector>& input, Slice* slice) {
-  Encoder::EncodingResults final_decode_input = RecoverReservedChunks(input);
-  Encoder final_decoder;
+// bool CodeConversionManagement::DecodeCollectedChunkVec(
+//     const std::map<raft_node_id_t, ChunkVector>& input, Slice* slice) {
+//   Encoder::EncodingResults final_decode_input = RecoverReservedChunks(input);
+//   Encoder final_decoder;
 
-  // iter::NewContainerIterator(input)
-  //     .filter([](auto elem) { return elem.second.as_vec().size() > 0; })
-  //     .for_each([&](auto elem) {
-  //       if (final_decode_input.size() >= k_) {
-  //         return;
-  //       }
-  //       const auto& [id, v] = elem;
-  //       final_decode_input.emplace(id, Slice::Combine(v.SubVec(0, r_).as_slice_vec()));
-  //     });
+//   // iter::NewContainerIterator(input)
+//   //     .filter([](auto elem) { return elem.second.as_vec().size() > 0; })
+//   //     .for_each([&](auto elem) {
+//   //       if (final_decode_input.size() >= k_) {
+//   //         return;
+//   //       }
+//   //       const auto& [id, v] = elem;
+//   //       final_decode_input.emplace(id, Slice::Combine(v.SubVec(0, r_).as_slice_vec()));
+//   //     });
 
-  for (const auto& [id, cv] : input) {
-    if (cv.size() == 0) {
-      continue;
-    }
-    if (final_decode_input.size() >= k_) {
-      break;
-    }
-    final_decode_input.emplace(id, Slice::Combine(cv.SubVec(0, r_).as_slice_vec()));
-  }
+//   for (const auto& [id, cv] : input) {
+//     if (cv.size() == 0) {
+//       continue;
+//     }
+//     if (final_decode_input.size() >= k_) {
+//       break;
+//     }
+//     final_decode_input.emplace(id, Slice::Combine(cv.SubVec(0, r_).as_slice_vec()));
+//   }
 
-  auto ret = final_decoder.DecodeSlice(final_decode_input, k_, F_, slice);
-  return ret;
-}
+//   auto ret = final_decoder.DecodeSlice(final_decode_input, k_, F_, slice);
+//   return ret;
+// }
 
 void CodeConversionManagement::AdjustChunkDistribution(const ChunkDistribution& cd) {
   // First, clear all exists chunks from original chunk:

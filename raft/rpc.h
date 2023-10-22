@@ -25,6 +25,7 @@ class RpcClient {
   virtual void sendMessage(const RequestVoteArgs &args) = 0;
   virtual void sendMessage(const AppendEntriesArgs &args) = 0;
   virtual void sendMessage(const RequestFragmentsArgs &args) = 0;
+  virtual void sendMessage(const DeleteSubChunksArgs &args) = 0;
   virtual void setState(void *state) = 0;
   // Temporarily shut down this client stub. After calling this method, any
   // sendMessage() call would not work unless a recover() is called

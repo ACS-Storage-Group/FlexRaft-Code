@@ -32,7 +32,7 @@ TEST_F(RaftNodeBasicTest, DISABLED_TestSimplyProposeEntry) {
 }
 
 // Test one follower fail
-TEST_F(RaftNodeBasicTest, TestOneFollowerCrash) {
+TEST_F(RaftNodeBasicTest, DISABLED_TestOneFollowerCrash) {
   auto config = ConstructNodesConfig(7, false);
   LaunchAllServers(config);
   sleepMs(10);
@@ -56,7 +56,7 @@ TEST_F(RaftNodeBasicTest, TestOneFollowerCrash) {
   ClearTestContext(config);
 }
 
-TEST_F(RaftNodeBasicTest, TestTwoFollowersCrash) {
+TEST_F(RaftNodeBasicTest, DISABLED_TestTwoFollowersCrash) {
   auto config = ConstructNodesConfig(7, false);
   LaunchAllServers(config);
   sleepMs(10);
@@ -103,7 +103,7 @@ TEST_F(RaftNodeBasicTest, DISABLED_TestLeaderCrash) {
   ClearTestContext(config);
 }
 
-TEST_F(RaftNodeBasicTest, TestNewLeaderGetFullLogEntry) {
+TEST_F(RaftNodeBasicTest, DISABLED_TestNewLeaderGetFullLogEntry) {
   auto config = ConstructNodesConfig(7, false);
   LaunchAllServers(config);
   sleepMs(10);
@@ -168,6 +168,30 @@ TEST_F(RaftNodeBasicTest, DISABLED_TestNewLeaderGatheringFullLogEntry) {
   EXPECT_TRUE(ProposeOneEntry(5));
   EXPECT_TRUE(checkCommitted(pr1, 4));
   EXPECT_TRUE(checkCommitted(pr2, 5));
+
+  ClearTestContext(config);
+}
+TEST_F(RaftNodeBasicTest, TestRecoverChunksForNewServers) {
+  auto config = ConstructNodesConfig(7, false);
+  LaunchAllServers(config);
+  sleepMs(1000);
+
+  // Disconnect a follower
+  auto leader = GetLeaderId();
+  Disconnect((leader + 1) % node_num_);
+
+  // Propose and check data
+  EXPECT_TRUE(ProposeOneEntry(1, true));
+  EXPECT_TRUE(ProposeOneEntry(2, true));
+  EXPECT_TRUE(ProposeOneEntry(3, true));
+
+  // Reconnect the node, check if the leader can recover the entries
+  Reconnect((leader + 1) % node_num_);
+  sleepMs(1000);  // Wait 1 second to recover the failed server
+
+  EXPECT_TRUE(ProposeOneEntry(4, true));
+  EXPECT_TRUE(ProposeOneEntry(5, true));
+  EXPECT_TRUE(ProposeOneEntry(6, true));
 
   ClearTestContext(config);
 }

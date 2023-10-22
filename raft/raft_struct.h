@@ -93,6 +93,28 @@ struct RequestFragmentsReply {
   std::vector<LogEntry> fragments;
 };
 
+struct DeleteSubChunksArgs {
+  // We use term to ensure that this message is not a out-of-date message
+  raft_term_t term;
+
+  // Identify the range of Log entries to be deleted
+  raft_index_t start_index, last_index;
+
+  // Any node, no matter followers or leaders can issue this RPC
+  raft_node_id_t node_id;
+
+  // Delete all subchunks encoded from this Chunk
+  int chunk_id;
+};
+
+struct DeleteSubChunksReply {
+  raft_node_id_t reply_id;
+
+  raft_term_t term;
+
+  int success;
+};
+
 // A struct that indicates the command specified by user of the raft cluster
 struct CommandData {
   int start_fragment_offset;

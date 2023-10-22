@@ -1,5 +1,7 @@
 #pragma once
 
+#include <pstl/glue_algorithm_defs.h>
+
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -168,6 +170,18 @@ struct SubChunkVector {
   }
 
   void clear() { subchunks_.clear(); }
+
+  // Remove Subchunks encoded from given ChunkId
+  void RemoveSubChunk(int chunk_id) {
+    subchunks_.erase(std::remove_if(subchunks_.begin(), subchunks_.end(),
+                                    [&](const SubChunk& subchunk) {
+                                      return subchunk.subchunk_info_.chunk_id == chunk_id;
+                                    }),
+                     subchunks_.end());
+  }
+
+  auto Iter() { return subchunks_.begin(); }
+  auto EndIter() { return subchunks_.end(); }
 
   bool operator==(const SubChunkVector& rhs) const { return this->subchunks_ == rhs.subchunks_; }
 

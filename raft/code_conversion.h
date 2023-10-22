@@ -35,8 +35,8 @@ class CodeConversionManagement {
 
   // Given the liveness vector that indicates the current liveness status of this cluster,
   // Calculate the corresponding encoding data placement for it.
-  void EncodeForPlacement(const Slice& slice, const std::vector<bool>& live_vec,
-                          StaticEncoder* static_encoder);
+  // void EncodeForPlacement(const Slice& slice, const std::vector<bool>& live_vec,
+  //                         StaticEncoder* static_encoder);
 
   // Encode based on current liveness vector 
   void Encode(const Slice& slice, const std::vector<bool>& live_vec, StaticEncoder* static_encoder);
@@ -47,9 +47,9 @@ class CodeConversionManagement {
   // Adjust to the new liveness vector
   void AdjustNewLivenessVector(const std::vector<bool>& live_vec);
 
-  bool DecodeCollectedChunkVec(const std::map<raft_node_id_t, ChunkVector>& input, Slice* slice);
+  // bool DecodeCollectedChunkVec(const std::map<raft_node_id_t, ChunkVector>& input, Slice* slice);
 
-  void AdjustChunkDistribution(const std::vector<bool>& live_vec);
+  // void AdjustChunkDistribution(const std::vector<bool>& live_vec);
 
   const auto& GetLiveVecForCurrDistribution() const { return live_vec_; }
   void SetLiveVecForCurrDistribution(const std::vector<bool>& live_vec) { live_vec_ = live_vec; }
@@ -75,6 +75,13 @@ class CodeConversionManagement {
   // Return true if the enqueried server has received the original chunk.
   bool HasReceivedOrgChunk(raft_node_id_t node_id) const {
     return org_chunk_response_[node_id] == true;
+  }
+
+  Slice GetOriginalEncodedChunk(raft_node_id_t node_id) {
+    if (encoded_chunks_.size() <= node_id) {
+      return Slice(nullptr, 0);
+    }
+    return encoded_chunks_[node_id];
   }
 
   Slice GetAssignedChunk(raft_node_id_t node_id) {

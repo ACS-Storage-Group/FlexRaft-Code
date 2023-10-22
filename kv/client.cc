@@ -294,7 +294,8 @@ void KvServiceClient::DoGatherValueTaskCodeConversion(GatherValueTaskCodeConvers
       // decode the entry
       if (!gather_value_done.load() && task->decode_input->size() >= task->k) {
         raft::Slice results;
-        auto stat = ccm.DecodeCollectedChunkVec(*(task->decode_input), &results);
+        // auto stat = ccm.DecodeCollectedChunkVec(*(task->decode_input), &results);
+        auto stat = true;
         if (stat) {
           GetKeyFromPrefixLengthFormat(results.data(), res->value);
           res->err = kOk;

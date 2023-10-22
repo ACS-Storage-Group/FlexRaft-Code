@@ -108,15 +108,16 @@ void RaftEntryToRequestCodeConversion(const raft::LogEntry &ent, Request *reques
     // k, m, fragment_id, value_contents
     // The value_contents is the serialized ChunkVector (of both original part and reserved part)
 
-    auto cv = ent.GetOriginalChunkVector();
-    cv.Concatenate(ent.GetReservedChunkVector());
+    // auto cv = ent.GetOriginalChunkVector();
+    // cv.Concatenate(ent.GetReservedChunkVector());
+
 
     // Append the serialized CV contents
-    auto slice = cv.Serialize();
-    request->value.append(slice.data(), slice.size());
-    delete slice.data();
+    // auto slice = cv.Serialize();
+    // request->value.append(slice.data(), slice.size());
+    // delete slice.data();
 
-    LOG(raft::util::kRaft, "[CC] RaftEnt To Request: ChunkVector Size=%d", cv.size());
+    // LOG(raft::util::kRaft, "[CC] RaftEnt To Request: ChunkVector Size=%d", cv.size());
   }
 }
 

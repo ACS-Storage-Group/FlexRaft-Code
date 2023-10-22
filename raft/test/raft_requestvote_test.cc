@@ -127,6 +127,7 @@ class RaftElectionTest : public ::testing::Test {
     }
 
     void sendMessage(const RequestFragmentsArgs &args) override {}
+    void sendMessage(const DeleteSubChunksArgs &args) override {}
     void setState(void *) override {}
     void stop() override {}
     void recover() override {}

@@ -15,6 +15,7 @@
 #include "raft.h"
 #include "raft_struct.h"
 #include "raft_type.h"
+#include "serializer.h"
 #include "util.h"
 
 namespace raft {
@@ -77,6 +78,20 @@ RCF::ByteBuffer RaftRPCService::AppendEntries(const RCF::ByteBuffer &arg_buf) {
 RCF::ByteBuffer RaftRPCService::RequestFragments(const RCF::ByteBuffer &arg_buf) {
   RequestFragmentsArgs args;
   RequestFragmentsReply reply;
+
+  auto serializer = Serializer::NewSerializer();
+  serializer.Deserialize(&arg_buf, &args);
+  raft_->ProcessCodeConversion(&args, &reply);
+
+  RCF::ByteBuffer reply_buf(serializer.getSerializeSize(reply));
+  serializer.Serialize(&reply, &reply_buf);
+
+  return reply_buf;
+}
+
+RCF::ByteBuffer RaftRPCService::DeleteSubChunks(const RCF::ByteBuffer &arg_buf) {
+  DeleteSubChunksArgs args;
+  DeleteSubChunksReply reply;
 
   auto serializer = Serializer::NewSerializer();
   serializer.Deserialize(&arg_buf, &args);
@@ -169,6 +184,25 @@ void RCFRpcClient::sendMessage(const RequestFragmentsArgs &args) {
   ret = client_ptr->RequestFragments(RCF::AsyncTwoway(cmp_callback), arg_buf);
 }
 
+void RCFRpcClient::sendMessage(const DeleteSubChunksArgs &args) {
+  if (stopped_) {
+    return;
+  }
+
+  ClientPtr client_ptr(
+      new RcfClient<I_RaftRPCService>(RCF::TcpEndpoint(target_address_.ip, target_address_.port)));
+
+  setMaxTransportLength(client_ptr);
+
+  auto serializer = Serializer::NewSerializer();
+  RCF::ByteBuffer arg_buf(serializer.getSerializeSize(args));
+  serializer.Serialize(&args, &arg_buf);
+
+  RCF::Future<RCF::ByteBuffer> ret;
+  auto cmp_callback = [=]() { onDeleteSubChunksComplete(ret, client_ptr, this->raft_, this->id_); };
+  ret = client_ptr->RequestFragments(RCF::AsyncTwoway(cmp_callback), arg_buf);
+}
+
 void RCFRpcClient::onRequestVoteComplete(RCF::Future<RCF::ByteBuffer> ret, ClientPtr client_ptr,
                                          RaftState *raft, raft_node_id_t peer) {
   (void)client_ptr;
@@ -245,6 +279,22 @@ void RCFRpcClient::onRequestFragmentsComplete(RCF::Future<RCF::ByteBuffer> ret,
   } else {
     RCF::ByteBuffer ret_buf = *ret;
     RequestFragmentsReply reply;
+    Serializer::NewSerializer().Deserialize(&ret_buf, &reply);
+    // raft->Process(&reply);
+    raft->ProcessCodeConversion(&reply);
+  }
+}
+
+void RCFRpcClient::onDeleteSubChunksComplete(RCF::Future<RCF::ByteBuffer> ret, ClientPtr client_ptr,
+                                             RaftState *raft, raft_node_id_t peer) {
+  (void)client_ptr;
+
+  auto ePtr = ret.getAsyncException();
+  if (ePtr.get()) {
+    LOG(util::kRPC, "S%d DeleteSubChunks RPC Call Error: %s", peer, ePtr->getErrorString().c_str());
+  } else {
+    RCF::ByteBuffer ret_buf = *ret;
+    DeleteSubChunksReply reply;
     Serializer::NewSerializer().Deserialize(&ret_buf, &reply);
     // raft->Process(&reply);
     raft->ProcessCodeConversion(&reply);

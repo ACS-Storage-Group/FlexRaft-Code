@@ -55,5 +55,10 @@ target_link_libraries(readbench_client kv gflags)
 add_executable(leaderpre_bench leaderpre_bench.cc)
 target_link_libraries(leaderpre_bench kv gflags)
 
+add_executable(follower_recover_bench follower_recover_bench.cc)
+target_link_libraries(follower_recover_bench kv gflags)
+
+
+
 
 

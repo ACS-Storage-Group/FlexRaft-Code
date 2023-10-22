@@ -386,6 +386,21 @@ void RaftState::ProcessCodeConversion(AppendEntriesReply *reply) {
     auto update_nextIndex = reply->expect_index;
     auto update_matchIndex = update_nextIndex - 1;
 
+    if (auto ctx = GetRecoveryCtx(reply->reply_id); ctx) {
+      if (reply->chunk_info_cnt &&
+          reply->chunk_infos.at(0).raft_index == ctx->start_recovery_index_) {
+        auto peer = reply->reply_id;
+        auto dura = util::DurationToMicros(ctx->start_time_, util::NowTime());
+
+        EmitRecoveryRecord(peer, reply->chunk_infos.size(), dura);
+        // Clear the context related to recovery in case that two recovery operations mixed up
+        ClearRecoveryCtx(peer);
+
+        printf(">>> Recover S%d Ent(%lu) Elapse: %lu us <<<\n", peer, reply->chunk_infos.size(),
+               dura);
+      }
+    }
+
     if (node->NextIndex() < update_nextIndex) {
       node->SetNextIndex(update_nextIndex);
       LOG(util::kRaft, "[CC] S%d update peer S%d NI%d", id_, peer_id, node->NextIndex());
@@ -417,6 +432,8 @@ void RaftState::ProcessCodeConversion(AppendEntriesReply *reply) {
       }
     }
     tryUpdateCommitIndex();
+
+    // If this is a recovery task:
   } else {
     // NOTE: Simply set NextIndex to be expect_index might be error since the
     // message comes from reply might not be meaningful message Update nextIndex
@@ -653,6 +670,44 @@ void RaftState::ProcessCodeConversion(RequestFragmentsReply *reply) {
   PreLeaderBecomeLeaderCodeConversion();
   return;
 }
+
+void RaftState::ProcessCodeConversion(DeleteSubChunksArgs *args, DeleteSubChunksReply *reply) {
+  assert(args != nullptr && reply != nullptr);
+
+  live_monitor_.UpdateLiveness(args->node_id);
+
+  std::scoped_lock<std::mutex> lck(mtx_);
+
+  LOG(util::kRaft, "[CC] S%d RECV DeleteChunks From S%d (T%d SI=%d EI=%d CID=%d)", id_,
+      args->node_id, args->term, args->start_index, args->last_index, args->chunk_id);
+
+  reply->reply_id = id_;
+
+  if (args->term < CurrentTerm()) {
+    reply->term = CurrentTerm();
+    reply->success = false;
+
+    LOG(util::kRaft, "[CC] S%d REFUSE DeleteChunks: Higher Term(%d>%d)", id_, CurrentTerm(),
+        args->term);
+    return;
+  }
+
+  if (args->term > CurrentTerm() || Role() == kCandidate) {
+    convertToFollower(args->term);
+  }
+  resetElectionTimer();
+
+  // Remove all subchunks with given Chunk Id:
+  for (raft_index_t raft_index = args->start_index; raft_index < args->last_index; ++raft_index) {
+    auto ent = reserve_lm_->GetSingleLogEntry(raft_index);
+    ent->SubChunkVecRef().RemoveSubChunk(args->chunk_id);
+    // TODO: We need to sync this modification to the disk, directly remove all data is not feasible
+  }
+  reply->term = CurrentTerm();
+  reply->success = true;
+}
+
+void RaftState::ProcessCodeConversion(DeleteSubChunksReply *reply) {}
 
 // We have changed the Propose implementation of RaftState to use the CodeConversion version
 // of ReplicateNewProposeEntry.
@@ -1410,7 +1465,7 @@ void RaftState::AdjustChunkDistributionCodeConversion(raft_index_t raft_index,
   assert(ccm != nullptr);
   assert(stripe != nullptr);
 
-  ccm->AdjustChunkDistribution(live_vec);
+  ccm->AdjustNewLivenessVector(live_vec);
 
   for (int i = 0; i < live_vec.size(); ++i) {
     stripe->fragments[i].SetChunkInfo(ChunkInfo{code_conversion_k, raft_index, false});
@@ -1538,15 +1593,6 @@ void RaftState::ReplicateEntriesCodeConversion() {
   auto live_vec = live_monitor_.GetLivenessVector();
   LOG(util::kRaft, "[CC] S%d Get Current LiveVec: %s", id_, util::ToString(live_vec).c_str());
   MaybeAdjustDistributionAndReplicate(live_vec);
-  // for (auto peer_id : peers_) {
-  //   if (peer_id != id_) {
-  //     if (live_monitor_.IsAlive(peer_id)) {
-  //       sendAppendEntriesCodeConversion(peer_id);
-  //     } else {
-  //       sendHeartBeat(peer_id);
-  //     }
-  //   }
-  // }
 }
 
 void RaftState::MaybeReEncodingAndReplicate() {
@@ -1612,9 +1658,12 @@ void RaftState::MaybeAdjustDistributionAndReplicate(const std::vector<bool> &liv
   for (auto peer_id : peers_) {
     if (peer_id != id_) {
       auto peer = raft_peer_[peer_id];
-      peer->SetNextIndex(CommitIndex() + 1);
-      peer->SetMatchIndex(CommitIndex());
-      LOG(util::kRaft, "[CC] S%d REVERSE S%d NI To %d", id_, peer_id, peer->NextIndex());
+      if (peer->NextIndex() > CommitIndex() + 1) {
+        // Write with new K parameter
+        peer->SetNextIndex(CommitIndex() + 1);
+        peer->SetMatchIndex(CommitIndex());
+        LOG(util::kRaft, "[CC] S%d REVERSE S%d NI To %d", id_, peer_id, peer->NextIndex());
+      }
       if (live_monitor_.IsAlive(peer_id)) {
         sendAppendEntriesCodeConversion(peer_id);
       } else {
@@ -1792,30 +1841,77 @@ void RaftState::sendAppendEntriesCodeConversion(raft_node_id_t peer) {
   auto prev_term = lm_->TermAt(prev_index);
   auto prev_k = GetLastEncodingK(prev_index);
 
-  auto args = AppendEntriesArgs{CurrentTerm(), id_, prev_index, prev_term, prev_k, CommitIndex()};
+  if (next_index <= CommitIndex()) {
+    // If the next entry to be sent is less than the CommitIndex(), then this node should be
+    // recovered by sending the corresponding original chunks to it
+    LOG(util::kRaft, "[CC] S%d recover the data for S%d", id_, peer);
+    auto args = AppendEntriesArgs{CurrentTerm(), id_, prev_index, prev_term, prev_k, CommitIndex()};
+    auto require_entry_cnt = lm_->LastLogEntryIndex() - prev_index;
+    args.entries.reserve(require_entry_cnt);
 
-  auto require_entry_cnt = lm_->LastLogEntryIndex() - prev_index;
-  args.entries.reserve(require_entry_cnt);
+    for (auto raft_index = next_index; raft_index <= lm_->LastLogEntryIndex(); ++raft_index) {
+      auto ccm = cc_managment_[raft_index];
+      auto ent = lm_->GetSingleLogEntry(raft_index);
+      LogEntry send_ent;
+      send_ent.SetIndex(raft_index);
+      send_ent.SetTerm(ent->Term());
+      send_ent.SetType(kFragments);
+      // Set the k to be 0 to indicate this is a must write entry (i.e., A recovery entry)
+      send_ent.SetChunkInfo(ChunkInfo{0, raft_index});
+      send_ent.SetStartOffset(ent->StartOffset());
 
-  for (auto raft_index = next_index; raft_index <= lm_->LastLogEntryIndex(); ++raft_index) {
-    args.entries.push_back(encoded_stripe_[raft_index]->fragments[peer]);
-    auto ccm = cc_managment_[raft_index];
-    // Avoid resending original chunks if these chunks have been replicated for last round
-    if (ccm->HasReceivedOrgChunk(peer)) {
-      // This entry should not carry the original chunk part
-      args.entries.back().SetFragmentSlice(Slice(nullptr, 0));
-      LOG(util::kRaft, "[CC] S%d AE To S%d(REMOVE Org Chunk At I%d) at T%d", id_, peer, raft_index,
-          CurrentTerm());
+      send_ent.SetCommandLength(ent->CommandLength());
+
+      send_ent.SetNotEncodedSlice(Slice(ent->CommandData().data(), ent->StartOffset()));
+      send_ent.SetFragmentSlice(ccm->GetOriginalEncodedChunk(peer));
+      // No SubChunkVector currently
+
+      args.entries.push_back(send_ent);
+      LOG(util::kRaft, "[CC] S%d AE To S%d I%d (Org: %dB)", id_, peer, raft_index,
+          args.entries.back().FragmentSlice().size());
     }
-    LOG(util::kRaft, "[CC] S%d AE To S%d I%d (Org: %dB Reserve: %d)", id_, peer, raft_index,
-        args.entries.back().FragmentSlice().size(), args.entries.back().GetSubChunkVec().size());
-  }
+    LOG(util::kRaft, "[CC] S%d AE To S%d (I%d->I%d) at T%d", id_, peer, next_index,
+        lm_->LastLogEntryIndex(), CurrentTerm());
+    assert(require_entry_cnt == args.entries.size());
+    args.entry_cnt = args.entries.size();
 
-  LOG(util::kRaft, "S%d AE To S%d (I%d->I%d) at T%d", id_, peer, next_index,
-      lm_->LastLogEntryIndex(), CurrentTerm());
-  assert(require_entry_cnt == args.entries.size());
-  args.entry_cnt = args.entries.size();
-  rpc_clients_[peer]->sendMessage(args);
+    {
+      // Record the status of this recovery task
+      if (GetRecoveryCtx(peer) == nullptr) {
+        AddNewRecoveryCtx(peer);
+      }
+      GetRecoveryCtx(peer)->start_recovery_index_ = next_index;
+      GetRecoveryCtx(peer)->start_time_ = util::NowTime();
+    }
+
+    // Send the message out
+    rpc_clients_[peer]->sendMessage(args);
+  } else {
+    auto args = AppendEntriesArgs{CurrentTerm(), id_, prev_index, prev_term, prev_k, CommitIndex()};
+
+    auto require_entry_cnt = lm_->LastLogEntryIndex() - prev_index;
+    args.entries.reserve(require_entry_cnt);
+
+    for (auto raft_index = next_index; raft_index <= lm_->LastLogEntryIndex(); ++raft_index) {
+      args.entries.push_back(encoded_stripe_[raft_index]->fragments[peer]);
+      auto ccm = cc_managment_[raft_index];
+      // Avoid resending original chunks if these chunks have been replicated for last round
+      if (ccm->HasReceivedOrgChunk(peer)) {
+        // This entry should not carry the original chunk part
+        args.entries.back().SetFragmentSlice(Slice(nullptr, 0));
+        LOG(util::kRaft, "[CC] S%d AE To S%d(REMOVE Org Chunk At I%d) at T%d", id_, peer,
+            raft_index, CurrentTerm());
+      }
+      LOG(util::kRaft, "[CC] S%d AE To S%d I%d (Org: %dB Reserve: %d)", id_, peer, raft_index,
+          args.entries.back().FragmentSlice().size(), args.entries.back().GetSubChunkVec().size());
+    }
+
+    LOG(util::kRaft, "S%d AE To S%d (I%d->I%d) at T%d", id_, peer, next_index,
+        lm_->LastLogEntryIndex(), CurrentTerm());
+    assert(require_entry_cnt == args.entries.size());
+    args.entry_cnt = args.entries.size();
+    rpc_clients_[peer]->sendMessage(args);
+  }
 }
 
 bool RaftState::containEntry(raft_index_t raft_index, raft_term_t raft_term,
@@ -1831,7 +1927,7 @@ bool RaftState::containEntry(raft_index_t raft_index, raft_term_t raft_term,
     return false;
   }
 
-  if (entry->GetChunkInfo().GetK() != prev_k) {
+  if (entry->GetChunkInfo().GetK() != 0 && entry->GetChunkInfo().GetK() != prev_k) {
     return false;
   }
   return true;

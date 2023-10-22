@@ -27,6 +27,7 @@ RCF_BEGIN(I_RaftRPCService, "I_RaftRPCService")
 RCF_METHOD_R1(RCF::ByteBuffer, RequestVote, const RCF::ByteBuffer &)
 RCF_METHOD_R1(RCF::ByteBuffer, AppendEntries, const RCF::ByteBuffer &)
 RCF_METHOD_R1(RCF::ByteBuffer, RequestFragments, const RCF::ByteBuffer &)
+RCF_METHOD_R1(RCF::ByteBuffer, DeleteSubChunks, const RCF::ByteBuffer &)
 RCF_END(I_RaftService)
 
 // Some statistics about one rpc call arguments
@@ -78,6 +79,7 @@ class RaftRPCService {
   RCF::ByteBuffer RequestVote(const RCF::ByteBuffer &arg_buf);
   RCF::ByteBuffer AppendEntries(const RCF::ByteBuffer &arg_buf);
   RCF::ByteBuffer RequestFragments(const RCF::ByteBuffer &arg_buf);
+  RCF::ByteBuffer DeleteSubChunks(const RCF::ByteBuffer &arg_buf);
 
  private:
   RaftState *raft_;
@@ -104,6 +106,7 @@ class RCFRpcClient final : public RpcClient {
   void sendMessage(const RequestVoteArgs &args) override;
   void sendMessage(const AppendEntriesArgs &args) override;
   void sendMessage(const RequestFragmentsArgs &args) override;
+  void sendMessage(const DeleteSubChunksArgs &args) override;
   void setState(void *state) override { raft_ = reinterpret_cast<RaftState *>(state); }
 
   void setMaxTransportLength(ClientPtr ptr) {
@@ -130,6 +133,9 @@ class RCFRpcClient final : public RpcClient {
 
   static void onRequestFragmentsComplete(RCF::Future<RCF::ByteBuffer> buf, ClientPtr client_ptr,
                                          RaftState *raft, raft_node_id_t peer);
+
+  static void onDeleteSubChunksComplete(RCF::Future<RCF::ByteBuffer> ret, ClientPtr client_ptr,
+                                        RaftState *raft, raft_node_id_t peer);
 
  private:
   RaftState *raft_ = nullptr;

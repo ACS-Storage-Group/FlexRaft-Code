@@ -28,9 +28,9 @@ char *Serializer::serialize_logentry_helper(const LogEntry *entry, char *dst) {
 }
 
 const char *Serializer::deserialize_logentry_helper(const char *src, LogEntry *entry) {
-  // !!! Remember to minus sizeof(SubChunkVector) !!! 
+  // !!! Remember to minus sizeof(SubChunkVector) !!!
   // If you don't do this, the internal structure of the two ChunkVectors (Original and Reserved)
-  // would be messed up 
+  // would be messed up
   std::memcpy(entry, src,
               sizeof(LogEntry) - 2 * sizeof(CODE_CONVERSION_NAMESPACE::ChunkVector) -
                   sizeof(CODE_CONVERSION_NAMESPACE::SubChunkVector));
@@ -181,6 +181,26 @@ void Serializer::Deserialize(const RCF::ByteBuffer *buffer, RequestFragmentsRepl
   }
 }
 
+void Serializer::Serialize(const DeleteSubChunksArgs *args, RCF::ByteBuffer *buffer) {
+  auto dst = buffer->getPtr();
+  std::memcpy(dst, args, sizeof(DeleteSubChunksArgs));
+}
+
+void Serializer::Deserialize(const RCF::ByteBuffer *buffer, DeleteSubChunksArgs *args) {
+  auto src = buffer->getPtr();
+  std::memcpy(args, src, sizeof(DeleteSubChunksArgs));
+}
+
+void Serializer::Serialize(const DeleteSubChunksReply *reply, RCF::ByteBuffer *buffer) {
+  auto dst = buffer->getPtr();
+  std::memcpy(dst, reply, sizeof(DeleteSubChunksReply));
+}
+
+void Serializer::Deserialize(const RCF::ByteBuffer *buffer, DeleteSubChunksReply *reply) {
+  auto src = buffer->getPtr();
+  std::memcpy(reply, src, sizeof(DeleteSubChunksReply));
+}
+
 char *Serializer::PutPrefixLengthSlice(const Slice &slice, char *buf) {
   *reinterpret_cast<size_t *>(buf) = slice.size();
   buf += sizeof(size_t);
@@ -253,5 +273,9 @@ size_t Serializer::getSerializeSize(const RequestFragmentsReply &reply) {
   }
   return ret;
 }
+
+size_t Serializer::getSerializeSize(const DeleteSubChunksArgs &args) { return sizeof(args); }
+
+size_t Serializer::getSerializeSize(const DeleteSubChunksReply &reply) { return sizeof(reply); }
 
 }  // namespace raft
