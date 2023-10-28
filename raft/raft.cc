@@ -1263,9 +1263,9 @@ void RaftState::sendAppendEntries(raft_node_id_t peer) {
     // This is a recovery task, we need to record the recovery stats
     if (GetRecoveryCtx(peer) == nullptr) {
       AddNewRecoveryCtx(peer);
+      GetRecoveryCtx(peer)->start_recovery_index_ = next_index;
+      GetRecoveryCtx(peer)->start_time_ = util::NowTime();
     }
-    GetRecoveryCtx(peer)->start_recovery_index_ = next_index;
-    GetRecoveryCtx(peer)->start_time_ = util::NowTime();
   }
 
   for (auto raft_index = next_index; raft_index <= lm_->LastLogEntryIndex(); ++raft_index) {
