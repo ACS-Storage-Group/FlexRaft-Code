@@ -70,7 +70,7 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < FLAGS_write_num; ++i) {
       auto cmd = ConstructCommandFromValue(i, write_sz);
       auto pr = node->Propose(cmd);
-      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
     printf("Proposing is done\n");
   }

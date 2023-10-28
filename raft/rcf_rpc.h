@@ -20,7 +20,7 @@ namespace rpc {
 namespace config {
 // Each RPC call size must not exceed 512MB
 static constexpr size_t kMaxMessageLength = 512 * 1024 * 1024;
-static constexpr size_t kRPCTimeout = 500;
+static constexpr size_t kRPCTimeout = 10000;
 };  // namespace config
 
 RCF_BEGIN(I_RaftRPCService, "I_RaftRPCService")

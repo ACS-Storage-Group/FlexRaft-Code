@@ -934,8 +934,12 @@ void RaftState::CheckConflictEntryAndAppendNewCodeConversion(AppendEntriesArgs *
 
   reply->chunk_info_cnt = reply->chunk_infos.size();
 
-  if (storage_) storage_->Sync();
-  if (reserve_storage_) reserve_storage_->Sync();
+  if (storage_) {
+    // storage_->Sync();
+  }
+  if (reserve_storage_) {
+    // reserve_storage_->Sync();
+  }
 
   assert(lm_->LastLogEntryIndex() == reserve_lm_->LastLogEntryIndex());
 }
