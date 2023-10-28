@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "encoder.h"
+#include "gtest/gtest.h"
 #include "log_entry.h"
 #include "raft.h"
 #include "raft_node.h"
@@ -22,14 +23,13 @@
 #include "rsm.h"
 #include "storage.h"
 #include "util.h"
-#include "gtest/gtest.h"
 
 #define CONFLICT_TERM -2
 
 namespace raft {
 // A bunch of basic test framework
 class RaftNodeTest : public ::testing::Test {
-public:
+ public:
   static constexpr int kMaxNodeNum = 9;
   static constexpr raft_node_id_t kNoLeader = -1;
   static constexpr int kCommandDataLength = 1024;
@@ -49,10 +49,8 @@ public:
     // (index, term) uniquely identify an entry
     using CommitResult = std::pair<raft_term_t, int>;
 
-  public:
-    void ApplyLogEntry(LogEntry ent) override {
-      applied_entries_.insert({ent.Index(), ent});
-    }
+   public:
+    void ApplyLogEntry(LogEntry ent) override { applied_entries_.insert({ent.Index(), ent}); }
 
     // Return the applied entry at particular index, return true if there is
     // such an index, otherwise returns false
@@ -64,7 +62,7 @@ public:
       return true;
     }
 
-  private:
+   private:
     std::unordered_map<raft_index_t, LogEntry> applied_entries_;
   };
 
@@ -101,8 +99,7 @@ public:
     node_num_ = nodes_config.size();
     NetConfig net_config = GetNetConfigFromNodesConfig(nodes_config);
     for (const auto &[id, config] : nodes_config) {
-      LaunchRaftNodeInstance(
-          {id, net_config, config.storage_name, new RsmMock});
+      LaunchRaftNodeInstance({id, net_config, config.storage_name, new RsmMock});
     }
   }
 
@@ -118,9 +115,8 @@ public:
 
   bool CheckNoLeader() {
     bool has_leader = false;
-    std::for_each(nodes_, nodes_ + node_num_, [&](RaftNode *node) {
-      has_leader |= (node->getRaftState()->Role() == kLeader);
-    });
+    std::for_each(nodes_, nodes_ + node_num_,
+                  [&](RaftNode *node) { has_leader |= (node->getRaftState()->Role() == kLeader); });
     return has_leader == false;
   }
 
@@ -142,8 +138,7 @@ public:
     auto record = [&](RaftNode *node) {
       if (!node->IsDisconnected()) {
         auto raft_state = node->getRaftState();
-        leader_cnt[raft_state->CurrentTerm()] +=
-            (raft_state->Role() == kLeader);
+        leader_cnt[raft_state->CurrentTerm()] += (raft_state->Role() == kLeader);
       }
     };
     for (int i = 0; i < retry_cnt; ++i) {
@@ -175,7 +170,7 @@ public:
       raft_node_id_t leader_id = kNoLeader;
       ProposeResult propose_result;
       auto cmd = ConstructCommandFromValue(value);
-      for (int i = 0; i < node_num_; ++i) { // Search for a leader
+      for (int i = 0; i < node_num_; ++i) {  // Search for a leader
         if (!Alive(i)) {
           continue;
         }
@@ -218,9 +213,7 @@ public:
     return false;
   }
 
-  void sleepMs(int num) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(num));
-  }
+  void sleepMs(int num) { std::this_thread::sleep_for(std::chrono::milliseconds(num)); }
 
   // Check if propose_val has been committed and applied, return true if
   // committed and applied, i.e. we can read the applied fragments from
@@ -243,8 +236,7 @@ public:
           }
           if (ent.Type() == kFragments) {
             // Note that i is identical to the fragment id
-            collected_res.insert_or_assign(static_cast<raft_frag_id_t>(i),
-                                           ent.FragmentSlice());
+            collected_res.insert_or_assign(static_cast<raft_frag_id_t>(i), ent.FragmentSlice());
             decode_k = std::min(decode_k, ent.GetChunkInfo().GetK());
             LOG(util::kRaft, "Update DecodeK=%d", decode_k);
           }
@@ -276,8 +268,7 @@ public:
     }
     LOG(util::kRaft, "Decode Results: size=%d Tail Value=%d", res.size(),
         *(int *)(res.data() + res.size() - 4));
-    auto val_tail =
-        *reinterpret_cast<int *>(res.data() + kCommandDataLength - 8);
+    auto val_tail = *reinterpret_cast<int *>(res.data() + kCommandDataLength - 8);
     EXPECT_EQ(propose_val, val_tail);
     if (propose_val != val_tail) {
       return false;
@@ -288,8 +279,7 @@ public:
   int LivenessLevel() const { return node_num_ / 2; }
 
   bool Alive(int i) {
-    return nodes_[i] != nullptr && !nodes_[i]->Exited() &&
-           !nodes_[i]->IsDisconnected();
+    return nodes_[i] != nullptr && !nodes_[i]->Exited() && !nodes_[i]->IsDisconnected();
   }
 
   // Find current leader and returns its associated node id, if there is
@@ -317,6 +307,7 @@ public:
     if (!nodes_[id]->IsDisconnected()) {
       nodes_[id]->Disconnect();
     }
+    LOG(util::kRaft, "------ Disconnect S%d ------", id);
   }
 
   void Reconnect(raft_node_id_t id) {
@@ -335,8 +326,7 @@ public:
         node->Exit();
       }
     });
-    std::for_each(nodes_, nodes_ + node_num_,
-                  [](RaftNode *node) { delete node; });
+    std::for_each(nodes_, nodes_ + node_num_, [](RaftNode *node) { delete node; });
   }
 
   void ClearTestContext(const NodesConfig &nodes_config) {
@@ -347,9 +337,8 @@ public:
       }
     };
     std::for_each(nodes_, nodes_ + node_num_, cmp);
-    // Make sure all ticker threads have exited 
-    std::this_thread::sleep_for(
-        std::chrono::milliseconds(config::kRaftTickBaseInterval * 2));
+    // Make sure all ticker threads have exited
+    std::this_thread::sleep_for(std::chrono::milliseconds(config::kRaftTickBaseInterval * 2));
     for (int i = 0; i < node_num_; ++i) {
       delete nodes_[i];
     }
@@ -363,9 +352,9 @@ public:
     }
   }
 
-public:
+ public:
   // Record each nodes and all nodes number
   RaftNode *nodes_[kMaxNodeNum];
   int node_num_;
 };
-} // namespace raft
+}  // namespace raft

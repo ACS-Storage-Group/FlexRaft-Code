@@ -52,4 +52,7 @@ target_link_libraries(ycsb_client kv gflags)
 add_executable(readbench_client readbench_client.cc)
 target_link_libraries(readbench_client kv gflags)
 
+add_executable(follower_recover_bench follower_recover_bench.cc)
+target_link_libraries(follower_recover_bench kv gflags)
+
 

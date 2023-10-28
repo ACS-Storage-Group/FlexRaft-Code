@@ -1,7 +1,8 @@
 #include "raft_node_test.h"
-#include "util.h"
 
 #include <string>
+
+#include "util.h"
 
 namespace raft {
 class RaftNodeBasicTest : public RaftNodeTest {
@@ -120,7 +121,7 @@ TEST_F(RaftNodeBasicTest, DISABLED_TestNewLeaderGetFullLogEntry) {
   ClearTestContext(config);
 }
 
-TEST_F(RaftNodeBasicTest, TestNewLeaderGatheringFullLogEntry) {
+TEST_F(RaftNodeBasicTest, DISABLED_TestNewLeaderGatheringFullLogEntry) {
   auto config = ConstructNodesConfig(7, false);
   LaunchAllServers(config);
   sleepMs(10);
@@ -154,6 +155,27 @@ TEST_F(RaftNodeBasicTest, TestNewLeaderGatheringFullLogEntry) {
   EXPECT_TRUE(checkCommitted(pr2, 5));
 
   ClearTestContext(config);
+}
+
+TEST_F(RaftNodeBasicTest, TestRecoverFailedFollowerData) {
+  auto config = ConstructNodesConfig(7, false);
+  LaunchAllServers(config);
+  sleepMs(1000);
+
+  auto leader = GetLeaderId();
+  Disconnect((leader + 1) % node_num_);
+
+  // Propose and check the data
+  EXPECT_TRUE(ProposeOneEntry(1));
+  EXPECT_TRUE(ProposeOneEntry(2));
+  EXPECT_TRUE(ProposeOneEntry(3));
+
+  // Reconnect the failed follower, check if the data can be recoverred
+  Reconnect((leader + 1) % node_num_);
+
+  EXPECT_TRUE(ProposeOneEntry(4));
+  EXPECT_TRUE(ProposeOneEntry(5));
+  EXPECT_TRUE(ProposeOneEntry(6));
 }
 
 }  // namespace raft

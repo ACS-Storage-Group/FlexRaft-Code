@@ -48,7 +48,7 @@ RaftState *RaftState::NewRaftState(const RaftConfig &config) {
     ret->peers_.insert(id);
     ret->raft_peer_[id] = peer;
     ret->rpc_clients_[id] = rpc;
-    printf("Insert id: %d rpc=%p peer=%p\n", id, rpc, peer);
+    // printf("Insert id: %d rpc=%p peer=%p\n", id, rpc, peer);
   }
 
   // Construct log manager from persistence storage
@@ -234,6 +234,21 @@ void RaftState::Process(AppendEntriesReply *reply) {
     // Update nextIndex and matchIndex for this server
     auto update_nextIndex = reply->expect_index;
     auto update_matchIndex = update_nextIndex - 1;
+
+    if (auto ctx = GetRecoveryCtx(reply->reply_id); ctx) {
+      if (reply->chunk_info_cnt &&
+          reply->chunk_infos.at(0).raft_index == ctx->start_recovery_index_) {
+        auto peer = reply->reply_id;
+        auto dura = util::DurationToMicros(ctx->start_time_, util::NowTime());
+
+        EmitRecoveryRecord(peer, reply->chunk_infos.size(), dura);
+        // Clear the context related to recovery in case that two recovery operations mixed up
+        ClearRecoveryCtx(peer);
+
+        printf(">>> Recover S%d Ent(%lu) Elapse: %lu us <<<\n", peer, reply->chunk_infos.size(),
+               dura);
+      }
+    }
 
     if (node->NextIndex() < update_nextIndex) {
       node->SetNextIndex(update_nextIndex);
@@ -1241,6 +1256,17 @@ void RaftState::sendAppendEntries(raft_node_id_t peer) {
 
   auto require_entry_cnt = lm_->LastLogEntryIndex() - prev_index;
   args.entries.reserve(require_entry_cnt);
+
+  if (next_index <= CommitIndex()) {
+    LOG(util::kRaft, "[CC] S%d Recover data for S%d(I%d->I%d)", id_, peer, next_index,
+        lm_->LastLogEntryIndex());
+    // This is a recovery task, we need to record the recovery stats
+    if (GetRecoveryCtx(peer) == nullptr) {
+      AddNewRecoveryCtx(peer);
+    }
+    GetRecoveryCtx(peer)->start_recovery_index_ = next_index;
+    GetRecoveryCtx(peer)->start_time_ = util::NowTime();
+  }
 
   for (auto raft_index = next_index; raft_index <= lm_->LastLogEntryIndex(); ++raft_index) {
     args.entries.push_back(encoded_stripe_[raft_index]->fragments[peer]);

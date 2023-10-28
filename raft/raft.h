@@ -219,6 +219,18 @@ class RaftState {
   RaftState(const RaftState &) = delete;
   RaftState &operator=(const RaftState &) = delete;
 
+  // Recovery related struct
+  struct RecoveryCtx {
+    util::TimePoint start_time_;
+    raft_index_t start_recovery_index_;
+  };
+
+  struct RecoveryRecord {
+    raft_node_id_t recover_node;
+    int entry_cnt;  // Number of entries to be recovered
+    uint32_t dura;
+  };
+
  public:
   // Process a bunch of RPC request or response, the first parameter is the
   // input of this process, the second parameter is the output.
@@ -456,6 +468,21 @@ class RaftState {
   // A place for storing fragments come from RequestFragments
   PreLeaderStripeStore preleader_stripe_store_;
 
+  auto GetRecoveryCtx(raft_node_id_t id) -> RecoveryCtx * {
+    if (recovery_ctx_.count(id) == 0) {
+      return nullptr;
+    }
+    return recovery_ctx_[id];
+  }
+
+  void AddNewRecoveryCtx(raft_node_id_t id) { recovery_ctx_[id] = new RecoveryCtx(); }
+
+  void ClearRecoveryCtx(raft_node_id_t id) { recovery_ctx_.erase(id); }
+
+  void EmitRecoveryRecord(raft_node_id_t node, int ent_cnt, uint32_t dura) {
+    recover_records_.push_back(RecoveryRecord{node, ent_cnt, dura});
+  }
+
  public:
   std::set<raft_node_id_t> peers_;
   RaftPeer *raft_peer_[32] = {nullptr};
@@ -479,6 +506,10 @@ class RaftState {
 
   // Elapse time of microseconds
   std::unordered_map<raft_index_t, uint64_t> commit_elapse_time_;
+
+  // Context of recovery operations
+  std::unordered_map<raft_node_id_t, RecoveryCtx *> recovery_ctx_;
+  std::vector<RecoveryRecord> recover_records_;
 
   int alive_servers_of_last_point_;
 
