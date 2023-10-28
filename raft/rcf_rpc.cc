@@ -87,7 +87,8 @@ RCF::ByteBuffer RaftRPCService::RequestFragments(const RCF::ByteBuffer &arg_buf)
 
 RCFRpcClient::RCFRpcClient(const NetAddress &target_address, raft_node_id_t id)
     : target_address_(target_address), id_(id), rcf_init_(), stopped_(false) {
-  // LOG(util::kRaft, "S%d init with Raft RPC server(ip=%s port=%d)", id_, target_address_.ip.c_str(),
+  // LOG(util::kRaft, "S%d init with Raft RPC server(ip=%s port=%d)", id_,
+  // target_address_.ip.c_str(),
   //     target_address_.port);
 }
 
