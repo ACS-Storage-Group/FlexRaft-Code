@@ -546,7 +546,7 @@ void RaftState::checkConflictEntryAndAppendNew(AppendEntriesArgs *args, AppendEn
   // Persist newly added log entries, or persist the changes to deleted log
   // entries
   if (storage_ != nullptr) {
-    storage_->Sync();
+    // storage_->Sync();
   }
 }
 
