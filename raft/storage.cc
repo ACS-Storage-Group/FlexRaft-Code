@@ -98,12 +98,12 @@ void FileStorage::LogEntries(std::vector<LogEntry> *entries) {
 }
 
 void FileStorage::AppendEntry(const LogEntry &ent) {
-  LOG(util::kRaft, "Storage: AppendEntry I%d", ent.Index());
   if (ent.Index() != header_.lastLogIndex + 1) {
     return;
   }
   auto ser = Serializer::NewSerializer();
   auto write_size = ser.getSerializeSize(ent);
+  LOG(util::kRaft, "Storage: AppendEntry I%d, Size=%d", ent.Index(), write_size);
   if (!this->buf_ || write_size > this->buf_size_) {
     AllocateNewInternalBuffer(write_size);
   }
